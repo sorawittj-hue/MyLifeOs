@@ -6,12 +6,14 @@ import { auth, googleProvider } from './firebase';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { firebaseService } from './firebaseService';
 
+export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings';
+
 interface AppState {
   user: User | null;
   firebaseUser: FirebaseUser | null;
   isLoaded: boolean;
   isAuthReady: boolean;
-  activeTab: string;
+  activeTab: TabName;
   theme: 'dark' | 'light';
   units: 'metric' | 'imperial';
   notifications: {
@@ -23,7 +25,7 @@ interface AppState {
   isGoogleFitConnected: boolean;
   demoMode: boolean;
   setUser: (user: User) => void;
-  setActiveTab: (tab: string) => void;
+  setActiveTab: (tab: TabName) => void;
   setTheme: (theme: 'dark' | 'light') => void;
   setUnits: (units: 'metric' | 'imperial') => void;
   setNotifications: (notifs: Partial<AppState['notifications']>) => void;
@@ -108,22 +110,28 @@ export const useAppStore = create<AppState>()(
                 'foodLogs', 'waterLogs', 'stepLogs', 'sleepLogs', 
                 'vitals', 'bodyMetrics', 'habits', 'habitCompletions', 
                 'fastingSessions', 'workouts', 'chatMessages'
-              ];
+              ] as const;
 
               for (const col of collections) {
                 try {
-                  const localData = await (db as any)[col].toArray();
+                  const table = db[col];
+                  const localData = await table.toArray();
                   if (localData.length > 0) {
+                    // Get existing data from Firebase to avoid duplicates
+                    const remoteData = await firebaseService.getCollection<any>(col, fbUser.uid);
+                    const remoteTimestamps = new Set(remoteData.map(d => d.timestamp || d.date || d.startTime));
+
                     for (const item of localData) {
-                      // For simplicity, we just add them. Firebase rules or logic could handle duplicates.
-                      await firebaseService.addToCollection(col, item);
+                      const identifier = (item as any).timestamp || (item as any).date || (item as any).startTime;
+                      if (!remoteTimestamps.has(identifier)) {
+                        await firebaseService.addToCollection(col, item);
+                      }
                     }
                     // Clear local data ONLY after all items in this collection are synced successfully
-                    await (db as any)[col].clear();
+                    await table.clear();
                   }
                 } catch (error) {
                   console.error(`Failed to sync collection ${col}:`, error);
-                  // If one collection fails, we continue with others but don't clear the failed one
                 }
               }
             };

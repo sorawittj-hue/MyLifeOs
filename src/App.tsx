@@ -1,4 +1,6 @@
 import React, { useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { type TabName } from './lib/store';
 import { Home, Timer, Utensils, Dumbbell, BarChart3, Bot, Settings, CheckSquare, Moon, User } from 'lucide-react';
 import { useAppStore } from './lib/store';
 import { haptics } from './lib/haptics';
@@ -17,10 +19,20 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function App() {
   const { activeTab, setActiveTab, isLoaded, loadUser, theme } = useAppStore();
   const [showMore, setShowMore] = React.useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     loadUser();
   }, []);
+
+  // Sync activeTab with URL
+  useEffect(() => {
+    const path = location.pathname.slice(1) || 'dashboard';
+    if (path !== activeTab) {
+      setActiveTab(path as TabName);
+    }
+  }, [location.pathname]);
 
   if (!isLoaded) {
     return (
@@ -37,50 +49,20 @@ export default function App() {
     );
   }
 
-  const renderContent = () => {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-        >
-          {(() => {
-            switch (activeTab) {
-              case 'dashboard': return <Dashboard />;
-              case 'fasting': return <FastingTracker />;
-              case 'nutrition': return <CalorieTracker />;
-              case 'workout': return <WorkoutTracker />;
-              case 'metrics': return <BodyMetrics />;
-              case 'habits': return <HabitTracker />;
-              case 'sleep': return <SleepTracker />;
-              case 'coach': return <AICoach />;
-              case 'profile': return <Profile />;
-              case 'settings': return <SettingsScreen />;
-              default: return <Dashboard />;
-            }
-          })()}
-        </motion.div>
-      </AnimatePresence>
-    );
-  };
-
   const navItems = [
-    { id: 'dashboard', icon: Home, label: 'หน้าหลัก' },
-    { id: 'nutrition', icon: Utensils, label: 'อาหาร' },
-    { id: 'workout', icon: Dumbbell, label: 'ออกกำลัง' },
-    { id: 'metrics', icon: BarChart3, label: 'ร่างกาย' },
-    { id: 'profile', icon: User, label: 'โปรไฟล์' },
+    { id: 'dashboard', icon: Home, label: 'หน้าหลัก', path: '/' },
+    { id: 'nutrition', icon: Utensils, label: 'อาหาร', path: '/nutrition' },
+    { id: 'workout', icon: Dumbbell, label: 'ออกกำลัง', path: '/workout' },
+    { id: 'metrics', icon: BarChart3, label: 'ร่างกาย', path: '/metrics' },
+    { id: 'profile', icon: User, label: 'โปรไฟล์', path: '/profile' },
   ];
 
   const secondaryNav = [
-    { id: 'fasting', icon: Timer, label: 'ทำ IF' },
-    { id: 'habits', icon: CheckSquare, label: 'นิสัย' },
-    { id: 'sleep', icon: Moon, label: 'การนอน' },
-    { id: 'coach', icon: Bot, label: 'โค้ช AI' },
-    { id: 'settings', icon: Settings, label: 'ตั้งค่า' },
+    { id: 'fasting', icon: Timer, label: 'ทำ IF', path: '/fasting' },
+    { id: 'habits', icon: CheckSquare, label: 'นิสัย', path: '/habits' },
+    { id: 'sleep', icon: Moon, label: 'การนอน', path: '/sleep' },
+    { id: 'coach', icon: Bot, label: 'โค้ช AI', path: '/coach' },
+    { id: 'settings', icon: Settings, label: 'ตั้งค่า', path: '/settings' },
   ];
 
   return (
@@ -89,7 +71,20 @@ export default function App() {
     }`}>
       {/* Main Content Area */}
       <main className="max-w-md mx-auto min-h-screen pb-24">
-        {renderContent()}
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/nutrition" element={<CalorieTracker />} />
+            <Route path="/workout" element={<WorkoutTracker />} />
+            <Route path="/metrics" element={<BodyMetrics />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/fasting" element={<FastingTracker />} />
+            <Route path="/habits" element={<HabitTracker />} />
+            <Route path="/sleep" element={<SleepTracker />} />
+            <Route path="/coach" element={<AICoach />} />
+            <Route path="/settings" element={<SettingsScreen />} />
+          </Routes>
+        </AnimatePresence>
       </main>
 
       {/* Bottom Navigation */}
@@ -102,7 +97,7 @@ export default function App() {
               key={item.id}
               onClick={() => {
                 haptics.light();
-                setActiveTab(item.id);
+                navigate(item.path);
               }}
               className={`flex flex-col items-center gap-1 transition-all duration-300 ${
                 activeTab === item.id 
@@ -159,7 +154,7 @@ export default function App() {
                         key={item.id}
                         onClick={() => {
                           haptics.light();
-                          setActiveTab(item.id);
+                          navigate(item.path);
                           setShowMore(false);
                         }}
                         className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${

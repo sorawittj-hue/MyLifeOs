@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Flame, Droplets, Timer, ChevronRight, TrendingDown, Target, Zap, Heart, Moon, Wind, Bot, Cloud, CloudOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { db, type FoodLog, type WaterLog, type BodyMetric, type Vital, type StepLog, type SleepLog } from '../lib/db';
 import { haptics } from '../lib/haptics';
-import { useAppStore } from '../lib/store';
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { useAppStore, type TabName } from '../lib/store';
+import { format } from 'date-fns';
 import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, Tooltip, AreaChart, Area } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateDailyInsight } from '../lib/gemini';
 import { firebaseService } from '../lib/firebaseService';
+import { where, orderBy, limit } from 'firebase/firestore';
 
 export default function Dashboard() {
   const { user, theme, activeTab, setActiveTab, isGoogleFitConnected, firebaseUser } = useAppStore();
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     calories: 0,
     water: 0,
@@ -40,23 +43,38 @@ export default function Dashboard() {
     let steps: StepLog | undefined;
 
     if (firebaseUser) {
-      const foodData = await firebaseService.getCollection<FoodLog>('foodLogs', firebaseUser.uid);
-      foods = foodData.filter(f => f.date === today);
+      const foodData = await firebaseService.getCollection<FoodLog>('foodLogs', firebaseUser.uid, [
+        where('date', '==', today)
+      ]);
+      foods = foodData;
       
-      const waterData = await firebaseService.getCollection<WaterLog>('waterLogs', firebaseUser.uid);
-      water = waterData.filter(w => w.date === today);
+      const waterData = await firebaseService.getCollection<WaterLog>('waterLogs', firebaseUser.uid, [
+        where('date', '==', today)
+      ]);
+      water = waterData;
       
-      const weightData = await firebaseService.getCollection<BodyMetric>('bodyMetrics', firebaseUser.uid);
-      weights = weightData.sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
+      const weightData = await firebaseService.getCollection<BodyMetric>('bodyMetrics', firebaseUser.uid, [
+        orderBy('date', 'desc'),
+        limit(7)
+      ]);
+      weights = weightData.reverse();
       
-      const sleepData = await firebaseService.getCollection<SleepLog>('sleepLogs', firebaseUser.uid);
-      sleep = sleepData.find(s => s.date === today);
+      const sleepData = await firebaseService.getCollection<SleepLog>('sleepLogs', firebaseUser.uid, [
+        where('date', '==', today),
+        limit(1)
+      ]);
+      sleep = sleepData[0];
       
-      const vitalData = await firebaseService.getCollection<Vital>('vitals', firebaseUser.uid);
-      vitals = vitalData.filter(v => v.date === today);
+      const vitalData = await firebaseService.getCollection<Vital>('vitals', firebaseUser.uid, [
+        where('date', '==', today)
+      ]);
+      vitals = vitalData;
       
-      const stepData = await firebaseService.getCollection<StepLog>('stepLogs', firebaseUser.uid);
-      steps = stepData.find(s => s.date === today);
+      const stepData = await firebaseService.getCollection<StepLog>('stepLogs', firebaseUser.uid, [
+        where('date', '==', today),
+        limit(1)
+      ]);
+      steps = stepData[0];
     } else {
       foods = await db.foodLogs.where('date').equals(today).toArray();
       water = await db.waterLogs.where('date').equals(today).toArray();
@@ -138,7 +156,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, x: 0 }}
             className={`${textMuted} text-xs font-bold uppercase tracking-[0.2em] mb-1`}
           >
-            {format(new Date(), 'EEEE, d MMMM', { locale: undefined })}
+            {format(new Date(), 'EEEE, d MMMM')}
           </motion.p>
           <h1 className="text-3xl font-bold tracking-tight">สวัสดี, {user?.name?.split(' ')[0] || 'คุณ'}</h1>
         </div>
@@ -147,7 +165,7 @@ export default function Dashboard() {
           className="relative group cursor-pointer flex items-center gap-3"
           onClick={() => {
             haptics.light();
-            setActiveTab('profile');
+            navigate('/profile');
           }}
         >
           <div className="flex flex-col items-end">
@@ -174,7 +192,7 @@ export default function Dashboard() {
       </header>
 
       {/* Bento Grid Layout */}
-      <div className="grid grid-cols-6 grid-rows-7 gap-4 h-[800px]">
+      <div className="grid grid-cols-6 gap-4 auto-rows-min">
         
         {/* Steps - New Bento */}
         <motion.div 
@@ -182,9 +200,9 @@ export default function Dashboard() {
           whileHover={{ y: -5 }}
           onClick={() => {
             haptics.light();
-            setActiveTab('metrics');
+            navigate('/metrics');
           }}
-          className={`col-span-6 row-span-1 ${cardBg} bento-card p-4 flex items-center justify-between cursor-pointer group overflow-hidden relative`}
+          className={`col-span-6 ${cardBg} bento-card p-4 flex items-center justify-between cursor-pointer group overflow-hidden relative`}
         >
           <div className="flex items-center gap-4 relative z-10">
             <div className="w-10 h-10 bg-orange-500/10 text-orange-500 rounded-xl flex items-center justify-center">
@@ -215,9 +233,9 @@ export default function Dashboard() {
           whileHover={{ y: -5 }}
           onClick={() => {
             haptics.light();
-            setActiveTab('nutrition');
+            navigate('/nutrition');
           }}
-          className={`col-span-4 row-span-3 ${cardBg} bento-card p-6 flex flex-col justify-between cursor-pointer relative overflow-hidden group`}
+          className={`col-span-6 sm:col-span-4 ${cardBg} bento-card p-6 flex flex-col justify-between cursor-pointer relative overflow-hidden group min-h-[240px]`}
         >
           <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
             <Flame size={120} className="text-nutrition" />
@@ -258,9 +276,9 @@ export default function Dashboard() {
           whileHover={{ y: -5 }}
           onClick={() => {
             haptics.light();
-            setActiveTab('nutrition');
+            navigate('/nutrition');
           }}
-          className={`col-span-2 row-span-4 ${cardBg} bento-card p-6 flex flex-col justify-between cursor-pointer group`}
+          className={`col-span-6 sm:col-span-2 ${cardBg} bento-card p-6 flex flex-col justify-between cursor-pointer group min-h-[240px]`}
         >
           <div className="w-12 h-12 bg-water/10 text-water rounded-2xl flex items-center justify-center">
             <Droplets size={24} />
@@ -287,9 +305,9 @@ export default function Dashboard() {
           whileHover={{ y: -5 }}
           onClick={() => {
             haptics.light();
-            setActiveTab('metrics');
+            navigate('/metrics');
           }}
-          className={`col-span-2 row-span-2 ${cardBg} bento-card p-5 flex flex-col justify-between cursor-pointer`}
+          className={`col-span-3 sm:col-span-2 ${cardBg} bento-card p-5 flex flex-col justify-between cursor-pointer min-h-[140px]`}
         >
           <div className="flex justify-between items-center">
             <div className="w-10 h-10 bg-activity/10 text-activity rounded-xl flex items-center justify-center">
@@ -309,9 +327,9 @@ export default function Dashboard() {
           whileHover={{ y: -5 }}
           onClick={() => {
             haptics.light();
-            setActiveTab('sleep');
+            navigate('/sleep');
           }}
-          className={`col-span-2 row-span-2 ${cardBg} bento-card p-5 flex flex-col justify-between cursor-pointer`}
+          className={`col-span-3 sm:col-span-2 ${cardBg} bento-card p-5 flex flex-col justify-between cursor-pointer min-h-[140px]`}
         >
           <div className="flex justify-between items-center">
             <div className="w-10 h-10 bg-sleep/10 text-sleep rounded-xl flex items-center justify-center">
@@ -330,9 +348,9 @@ export default function Dashboard() {
           whileHover={{ y: -5 }}
           onClick={() => {
             haptics.light();
-            setActiveTab('metrics');
+            navigate('/metrics');
           }}
-          className={`col-span-4 row-span-2 ${cardBg} bento-card p-6 flex flex-col justify-between cursor-pointer relative overflow-hidden`}
+          className={`col-span-6 sm:col-span-4 ${cardBg} bento-card p-6 flex flex-col justify-between cursor-pointer relative overflow-hidden min-h-[180px]`}
         >
           <div className="flex justify-between items-center relative z-10">
             <div>
@@ -372,9 +390,9 @@ export default function Dashboard() {
           whileHover={{ y: -5 }}
           onClick={() => {
             haptics.light();
-            setActiveTab('fasting');
+            navigate('/fasting');
           }}
-          className={`col-span-2 row-span-1 ${cardBg} bento-card p-4 flex items-center gap-3 cursor-pointer`}
+          className={`col-span-6 sm:col-span-2 ${cardBg} bento-card p-4 flex items-center gap-3 cursor-pointer min-h-[80px]`}
         >
           <div className="w-8 h-8 bg-fasting/10 text-fasting rounded-lg flex items-center justify-center">
             <Timer size={16} />
@@ -394,7 +412,7 @@ export default function Dashboard() {
         className="relative group cursor-pointer"
         onClick={() => {
           haptics.light();
-          setActiveTab('coach');
+          navigate('/coach');
         }}
       >
         <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-600 blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
@@ -432,7 +450,7 @@ export default function Dashboard() {
               whileTap={{ scale: 0.98 }}
               onClick={() => {
                 haptics.light();
-                setActiveTab(action.tab as any);
+                navigate(`/${action.tab}`);
               }}
               className={`${cardBg} p-5 rounded-[2rem] border flex items-center gap-4 transition-all shadow-sm group`}
             >

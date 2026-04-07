@@ -11,7 +11,10 @@ import {
   onSnapshot,
   Timestamp,
   addDoc,
-  serverTimestamp
+  serverTimestamp,
+  orderBy,
+  limit,
+  QueryConstraint
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
 
@@ -102,10 +105,14 @@ export const firebaseService = {
     });
   },
 
-  async getCollection<T>(collectionName: string, uid: string): Promise<T[]> {
+  async getCollection<T>(collectionName: string, uid: string, queryConstraints: QueryConstraint[] = []): Promise<T[]> {
     const path = collectionName;
     try {
-      const q = query(collection(db, collectionName), where("uid", "==", uid));
+      const q = query(
+        collection(db, collectionName), 
+        where("uid", "==", uid),
+        ...queryConstraints
+      );
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
     } catch (error) {

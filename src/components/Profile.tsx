@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Target, Award, Calendar, Ruler, Weight, Activity, ChevronRight, Edit2, Heart, Droplets, Zap, Moon, Flame, LogIn, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../lib/store';
 import { db, type Vital, type FoodLog, type WaterLog } from '../lib/db';
 import { motion } from 'motion/react';
@@ -8,6 +9,7 @@ import { firebaseService } from '../lib/firebaseService';
 
 export default function Profile() {
   const { user, theme, setActiveTab, firebaseUser, login, logout } = useAppStore();
+  const navigate = useNavigate();
   const [latestVitals, setLatestVitals] = useState<Vital[]>([]);
   const [todayNutrition, setTodayNutrition] = useState({ calories: 0, water: 0 });
   const [isLoading, setIsLoading] = useState(true);
@@ -122,7 +124,7 @@ export default function Profile() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setActiveTab('settings')}
+            onClick={() => navigate('/settings')}
             className={`p-2 rounded-xl border ${cardBg} ${textMuted} hover:text-green-500 transition-colors`}
           >
             <Edit2 size={20} />
@@ -213,7 +215,7 @@ export default function Profile() {
         <section className="space-y-4">
           <div className="flex justify-between items-center px-1">
             <h3 className="text-lg font-bold">สัญญาณชีพล่าสุด</h3>
-            <button onClick={() => setActiveTab('metrics')} className="text-xs font-bold text-green-500 uppercase tracking-wider">ดูทั้งหมด</button>
+            <button onClick={() => navigate('/metrics')} className="text-xs font-bold text-green-500 uppercase tracking-wider">ดูทั้งหมด</button>
           </div>
           <div className="grid grid-cols-2 gap-4">
             {latestVitals.map((vital) => (
@@ -353,7 +355,7 @@ export default function Profile() {
       <motion.button
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        onClick={() => setActiveTab('settings')}
+        onClick={() => navigate('/settings')}
         className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors ${
           theme === 'dark' ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
         }`}
