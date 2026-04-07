@@ -1,8 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
+import { User, FoodLog, BodyMetric, Vital } from "./db";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
-export async function getAICoachResponse(prompt: string, context: any) {
+export interface AICoachContext {
+  user: User | null;
+  todayFood: FoodLog[];
+  recentWeight: BodyMetric[];
+  recentVitals: Vital[];
+}
+
+export async function getAICoachResponse(prompt: string, context: AICoachContext) {
   try {
     const model = "gemini-3-flash-preview";
     const systemInstruction = `You are LifeOS AI Health Coach, a world-class health and longevity expert.

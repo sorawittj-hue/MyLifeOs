@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   const { activeTab, setActiveTab, isLoaded, loadUser, theme } = useAppStore();
+  const [showMore, setShowMore] = React.useState(false);
 
   useEffect(() => {
     loadUser();
@@ -115,41 +116,57 @@ export default function App() {
           ))}
           
           {/* More Menu Button (Mobile Style) */}
-          <div className="relative group">
-            <button className={`flex flex-col items-center gap-1 transition-colors ${
-              theme === 'dark' ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600'
-            }`}>
+          <div className="relative">
+            <button 
+              onClick={() => {
+                haptics.light();
+                setShowMore(!showMore);
+              }}
+              className={`flex flex-col items-center gap-1 transition-colors ${
+                showMore ? 'text-green-500' : (theme === 'dark' ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600')
+              }`}
+            >
               <div className="grid grid-cols-2 gap-0.5">
-                <div className="w-1.5 h-1.5 bg-current rounded-full" />
-                <div className="w-1.5 h-1.5 bg-current rounded-full" />
-                <div className="w-1.5 h-1.5 bg-current rounded-full" />
-                <div className="w-1.5 h-1.5 bg-current rounded-full" />
+                <div className={`w-1.5 h-1.5 ${showMore ? 'bg-green-500' : 'bg-current'} rounded-full`} />
+                <div className={`w-1.5 h-1.5 ${showMore ? 'bg-green-500' : 'bg-current'} rounded-full`} />
+                <div className={`w-1.5 h-1.5 ${showMore ? 'bg-green-500' : 'bg-current'} rounded-full`} />
+                <div className={`w-1.5 h-1.5 ${showMore ? 'bg-green-500' : 'bg-current'} rounded-full`} />
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider">เพิ่มเติม</span>
             </button>
             
             {/* Popover Menu */}
-            <div className={`absolute bottom-full right-0 mb-4 w-48 border rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 p-2 space-y-1 ${
-              theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
-            }`}>
-              {secondaryNav.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    haptics.light();
-                    setActiveTab(item.id);
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                    activeTab === item.id 
-                      ? 'bg-green-500 text-black' 
-                      : theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'
+            <AnimatePresence>
+              {showMore && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className={`absolute bottom-full right-0 mb-4 w-48 border rounded-2xl shadow-2xl transition-all duration-300 p-2 space-y-1 ${
+                    theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
                   }`}
                 >
-                  <item.icon size={18} />
-                  <span className="text-sm font-bold">{item.label}</span>
-                </button>
-              ))}
-            </div>
+                  {secondaryNav.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        haptics.light();
+                        setActiveTab(item.id);
+                        setShowMore(false);
+                      }}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                        activeTab === item.id 
+                          ? 'bg-green-500 text-black' 
+                          : theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      <item.icon size={18} />
+                      <span className="text-sm font-bold">{item.label}</span>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </nav>

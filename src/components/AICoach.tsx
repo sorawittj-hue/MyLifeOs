@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import { db, type ChatMessage } from '../lib/db';
-import { getAICoachResponse } from '../lib/gemini';
+import { getAICoachResponse, type AICoachContext } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppStore } from '../lib/store';
@@ -21,7 +21,7 @@ export default function AICoach() {
       unsubscribe = firebaseService.subscribeToCollection('chatMessages', firebaseUser.uid, (data) => {
         const msgs = (data as ChatMessage[]).sort((a, b) => a.timestamp - b.timestamp);
         if (msgs.length === 0) {
-          const welcome: any = {
+          const welcome: ChatMessage = {
             role: 'model',
             content: "สวัสดี! ผมคือ AI Health Coach ของคุณ มีอะไรให้ผมช่วยดูแลสุขภาพของคุณในวันนี้ไหมครับ? ผมสามารถวิเคราะห์ข้อมูลของคุณ วางแผนการออกกำลังกาย หรือให้คำแนะนำด้านโภชนาการได้ครับ",
             timestamp: Date.now()
@@ -57,14 +57,14 @@ export default function AICoach() {
     const messageText = typeof overrideInput === 'string' ? overrideInput : input;
     if (!messageText.trim() || isLoading) return;
 
-    const userMsg: any = {
+    const userMsg: ChatMessage = {
       role: 'user',
       content: messageText,
       timestamp: Date.now()
     };
 
     if (!firebaseUser) {
-      setMessages(prev => [...prev, userMsg as ChatMessage]);
+      setMessages(prev => [...prev, userMsg]);
     }
     setInput('');
     setIsLoading(true);
@@ -73,7 +73,7 @@ export default function AICoach() {
       if (firebaseUser) {
         await firebaseService.addToCollection('chatMessages', userMsg);
       } else {
-        await db.chatMessages.add(userMsg as ChatMessage);
+        await db.chatMessages.add(userMsg);
       }
       
       // Gather context for AI
@@ -92,7 +92,7 @@ export default function AICoach() {
         vitals = await db.vitals.reverse().limit(5).toArray();
       }
 
-      const context = {
+      const context: AICoachContext = {
         user,
         todayFood: foodLogs,
         recentWeight: bodyMetrics,
@@ -101,7 +101,7 @@ export default function AICoach() {
 
       const response = await getAICoachResponse(messageText, context);
       
-      const aiMsg: any = {
+      const aiMsg: ChatMessage = {
         role: 'model',
         content: response,
         timestamp: Date.now()
@@ -110,8 +110,8 @@ export default function AICoach() {
       if (firebaseUser) {
         await firebaseService.addToCollection('chatMessages', aiMsg);
       } else {
-        await db.chatMessages.add(aiMsg as ChatMessage);
-        setMessages(prev => [...prev, aiMsg as ChatMessage]);
+        await db.chatMessages.add(aiMsg);
+        setMessages(prev => [...prev, aiMsg]);
       }
     } catch (error) {
       console.error(error);
