@@ -24,6 +24,10 @@ interface AppState {
   googleFitTokens: any | null;
   isGoogleFitConnected: boolean;
   demoMode: boolean;
+  insightCache: {
+    text: string;
+    date: string;
+  } | null;
   setUser: (user: User) => void;
   setActiveTab: (tab: TabName) => void;
   setTheme: (theme: 'dark' | 'light') => void;
@@ -31,6 +35,7 @@ interface AppState {
   setNotifications: (notifs: Partial<AppState['notifications']>) => void;
   setGoogleFitTokens: (tokens: any | null) => void;
   setDemoMode: (enabled: boolean) => void;
+  setInsightCache: (insight: { text: string; date: string } | null) => void;
   loadUser: () => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
@@ -50,6 +55,7 @@ export const useAppStore = create<AppState>()(
       googleFitTokens: null,
       isGoogleFitConnected: false,
       demoMode: false,
+      insightCache: null,
 
       setUser: async (user) => {
         const firebaseUser = get().firebaseUser;
@@ -79,6 +85,8 @@ export const useAppStore = create<AppState>()(
       },
       
       setDemoMode: (enabled) => set({ demoMode: enabled }),
+
+      setInsightCache: (insight) => set({ insightCache: insight }),
 
       login: async () => {
         try {
@@ -121,10 +129,16 @@ export const useAppStore = create<AppState>()(
                     const remoteData = await firebaseService.getCollection<any>(col, fbUser.uid);
                     const remoteTimestamps = new Set(remoteData.map(d => d.timestamp || d.date || d.startTime));
 
-                    for (const item of localData) {
+                    const itemsToSync = localData.filter(item => {
                       const identifier = (item as any).timestamp || (item as any).date || (item as any).startTime;
-                      if (!remoteTimestamps.has(identifier)) {
-                        await firebaseService.addToCollection(col, item);
+                      return !remoteTimestamps.has(identifier);
+                    });
+
+                    if (itemsToSync.length > 0) {
+                      // Use batch write for efficiency (max 500 items per batch)
+                      for (let i = 0; i < itemsToSync.length; i += 500) {
+                        const chunk = itemsToSync.slice(i, i + 500);
+                        await firebaseService.batchAdd(col, chunk, fbUser.uid);
                       }
                     }
                     // Clear local data ONLY after all items in this collection are synced successfully
@@ -186,9 +200,9 @@ export const useAppStore = create<AppState>()(
         theme: state.theme,
         units: state.units,
         notifications: state.notifications,
-        googleFitTokens: state.googleFitTokens,
         isGoogleFitConnected: state.isGoogleFitConnected,
         demoMode: state.demoMode,
+        insightCache: state.insightCache,
       }),
     }
   )

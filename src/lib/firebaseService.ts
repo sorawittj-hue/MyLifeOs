@@ -14,7 +14,8 @@ import {
   serverTimestamp,
   orderBy,
   limit,
-  QueryConstraint
+  QueryConstraint,
+  writeBatch
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
 
@@ -150,6 +151,20 @@ export const firebaseService = {
       await deleteDoc(docRef);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  },
+
+  async batchAdd(collectionName: string, items: any[], uid: string) {
+    const path = collectionName;
+    try {
+      const batch = writeBatch(db);
+      items.forEach(item => {
+        const docRef = doc(collection(db, collectionName));
+        batch.set(docRef, { ...item, uid, syncedAt: serverTimestamp() });
+      });
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
     }
   }
 };

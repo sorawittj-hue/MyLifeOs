@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { db, type FoodLog, type WaterLog, type BodyMetric, type Vital, type StepLog, type SleepLog } from '../lib/db';
 import { haptics } from '../lib/haptics';
 import { useAppStore, type TabName } from '../lib/store';
-import { format } from 'date-fns';
+import { format, parse, differenceInMinutes } from 'date-fns';
 import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, Tooltip, AreaChart, Area } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateDailyInsight } from '../lib/gemini';
@@ -12,8 +12,9 @@ import { firebaseService } from '../lib/firebaseService';
 import { where, orderBy, limit } from 'firebase/firestore';
 
 export default function Dashboard() {
-  const { user, theme, activeTab, setActiveTab, isGoogleFitConnected, firebaseUser } = useAppStore();
+  const { user, theme, activeTab, setActiveTab, isGoogleFitConnected, firebaseUser, insightCache, setInsightCache } = useAppStore();
   const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     calories: 0,
     water: 0,
@@ -34,6 +35,7 @@ export default function Dashboard() {
   }, [firebaseUser, activeTab]);
 
   const loadDashboardData = async () => {
+    setIsLoading(true);
     const today = format(new Date(), 'yyyy-MM-dd');
     let foods: FoodLog[] = [];
     let water: WaterLog[] = [];
@@ -89,10 +91,17 @@ export default function Dashboard() {
     
     let sleepHours = 0;
     if (sleep) {
-      const bed = new Date(`2000-01-01T${sleep.bedtime}`);
-      const wake = new Date(`2000-01-01T${sleep.wakeTime}`);
-      if (wake < bed) wake.setDate(wake.getDate() + 1);
-      sleepHours = (wake.getTime() - bed.getTime()) / (1000 * 60 * 60);
+      try {
+        const bed = parse(sleep.bedtime, 'HH:mm', new Date());
+        let wake = parse(sleep.wakeTime, 'HH:mm', new Date());
+        if (wake < bed) {
+          wake = new Date(wake.getTime() + 24 * 60 * 60 * 1000);
+        }
+        const minutes = differenceInMinutes(wake, bed);
+        sleepHours = minutes / 60;
+      } catch (e) {
+        console.error('Sleep calculation error:', e);
+      }
     }
 
     const currentStats = {
@@ -107,20 +116,32 @@ export default function Dashboard() {
     };
 
     setStats(currentStats);
+    setIsLoading(false);
 
-    // Generate AI Insight
-    setIsInsightLoading(true);
-    const aiInsight = await generateDailyInsight({
-      user,
-      todayStats: {
-        calories: calTotal,
-        water: waterTotal,
-        sleep: sleepHours,
-        vitals
+    // Generate AI Insight (with caching)
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    if (insightCache?.date === todayStr && insightCache.text) {
+      setInsight(insightCache.text);
+    } else {
+      setIsInsightLoading(true);
+      try {
+        const aiInsight = await generateDailyInsight({
+          user,
+          todayStats: {
+            calories: calTotal,
+            water: waterTotal,
+            sleep: sleepHours,
+            vitals
+          }
+        });
+        setInsight(aiInsight);
+        setInsightCache({ text: aiInsight, date: todayStr });
+      } catch (error) {
+        console.error('Failed to generate insight:', error);
+      } finally {
+        setIsInsightLoading(false);
       }
-    });
-    setInsight(aiInsight);
-    setIsInsightLoading(false);
+    }
   };
 
   const healthScore = 88;
@@ -141,6 +162,25 @@ export default function Dashboard() {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0 }
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-6 pb-32 max-w-2xl mx-auto">
+        <div className="flex justify-between items-end px-2">
+          <div className="space-y-2">
+            <div className="w-24 h-3 bg-zinc-800/50 rounded animate-pulse" />
+            <div className="w-48 h-8 bg-zinc-800/50 rounded animate-pulse" />
+          </div>
+          <div className="w-14 h-14 bg-zinc-800/50 rounded-[1.5rem] animate-pulse" />
+        </div>
+        <div className="grid grid-cols-6 gap-4">
+          <div className="col-span-6 h-20 bg-zinc-800/50 rounded-3xl animate-pulse" />
+          <div className="col-span-4 h-60 bg-zinc-800/50 rounded-3xl animate-pulse" />
+          <div className="col-span-2 h-60 bg-zinc-800/50 rounded-3xl animate-pulse" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div 
@@ -353,14 +393,20 @@ export default function Dashboard() {
           className={`col-span-6 sm:col-span-4 ${cardBg} bento-card p-6 flex flex-col justify-between cursor-pointer relative overflow-hidden min-h-[180px]`}
         >
           <div className="flex justify-between items-center relative z-10">
-            <div>
+            <div className="text-right">
               <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted}`}>น้ำหนัก</p>
               <h3 className="text-2xl font-bold">{stats.weight} <span className="text-xs font-normal text-zinc-500">กก.</span></h3>
             </div>
-            <div className="text-right">
-              <p className="text-[10px] font-bold text-body uppercase tracking-widest">เป้าหมาย {user?.targetWeight} กก.</p>
-              <p className="text-xs font-medium text-zinc-500">เหลืออีก {(stats.weight - (user?.targetWeight || 0)).toFixed(1)} กก.</p>
-            </div>
+            {user?.targetWeight && (
+              <div className="text-right">
+                <p className="text-[10px] font-bold text-body uppercase tracking-widest">เป้าหมาย {user.targetWeight} กก.</p>
+                <p className="text-xs font-medium text-zinc-500">
+                  {stats.weight > user.targetWeight 
+                    ? `เหลืออีก ${(stats.weight - user.targetWeight).toFixed(1)} กก.`
+                    : 'บรรลุเป้าหมายแล้ว!'}
+                </p>
+              </div>
+            )}
           </div>
           <div className="h-16 w-full mt-2">
             <ResponsiveContainer width="100%" height="100%">
