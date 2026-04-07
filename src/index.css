@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  /* Custom Category Colors */
+  --color-nutrition: #f97316; /* Orange */
+  --color-activity: #ef4444;  /* Red */
+  --color-sleep: #6366f1;     /* Indigo */
+  --color-fasting: #06b6d4;   /* Cyan */
+  --color-water: #3b82f6;     /* Blue */
+  --color-mind: #8b5cf6;      /* Violet */
+  --color-body: #10b981;      /* Emerald */
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-black text-white antialiased font-sans;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+@layer utilities {
+  .glass {
+    @apply backdrop-blur-xl bg-white/70 border border-white/20 dark:bg-zinc-900/70 dark:border-zinc-800/50;
+  }
+  
+  .glass-dark {
+    @apply backdrop-blur-xl bg-zinc-900/80 border border-zinc-800/50;
+  }
+
+  .bento-card {
+    @apply rounded-[2.5rem] border transition-all duration-500 hover:scale-[1.02] active:scale-[0.98];
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-white to-zinc-500;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Custom Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}

@@ -1,0 +1,8 @@
+{
+  "name": "LifeOS - Personal Health Super App",
+  "description": "A comprehensive, offline-first health dashboard with fasting, calorie tracking, workouts, and AI coaching.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

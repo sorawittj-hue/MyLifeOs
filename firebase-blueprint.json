@@ -1,0 +1,217 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profile",
+      "description": "User profile and health targets",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "age": { "type": "number" },
+        "weight": { "type": "number" },
+        "height": { "type": "number" },
+        "gender": { "type": "string", "enum": ["male", "female"] },
+        "targetWeight": { "type": "number" },
+        "dailyCalorieTarget": { "type": "number" }
+      },
+      "required": ["uid", "name"]
+    },
+    "foodLogs": {
+      "title": "Food Log",
+      "description": "Daily food intake records",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "name": { "type": "string" },
+        "calories": { "type": "number" },
+        "protein": { "type": "number" },
+        "carbs": { "type": "number" },
+        "fat": { "type": "number" },
+        "meal": { "type": "string", "enum": ["breakfast", "lunch", "dinner", "snack"] },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["uid", "date", "name", "calories"]
+    },
+    "waterLogs": {
+      "title": "Water Log",
+      "description": "Daily water intake records",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["uid", "date", "amount"]
+    },
+    "stepLogs": {
+      "title": "Step Log",
+      "description": "Daily step count records",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "count": { "type": "number" },
+        "source": { "type": "string" }
+      },
+      "required": ["uid", "date", "count"]
+    },
+    "sleepLogs": {
+      "title": "Sleep Log",
+      "description": "Daily sleep records",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "bedtime": { "type": "string" },
+        "wakeTime": { "type": "string" },
+        "quality": { "type": "number" },
+        "source": { "type": "string" }
+      },
+      "required": ["uid", "date", "bedtime", "wakeTime"]
+    },
+    "vitals": {
+      "title": "Vital Signs",
+      "description": "Heart rate, blood pressure, etc.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "type": { "type": "string", "enum": ["heart_rate", "blood_pressure", "blood_sugar", "glucose", "oxygen"] },
+        "value1": { "type": "number" },
+        "value2": { "type": "number" },
+        "unit": { "type": "string" },
+        "source": { "type": "string" }
+      },
+      "required": ["uid", "date", "time", "type", "value1"]
+    },
+    "bodyMetrics": {
+      "title": "Body Metric",
+      "description": "Weight, body fat, waist circumference",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "weightKg": { "type": "number" },
+        "bodyFatPct": { "type": "number" },
+        "waistCm": { "type": "number" }
+      },
+      "required": ["uid", "date", "weightKg"]
+    },
+    "habits": {
+      "title": "Habit",
+      "description": "Habit definition",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "frequency": { "type": "string" },
+        "color": { "type": "string" },
+        "icon": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "name"]
+    },
+    "habitCompletions": {
+      "title": "Habit Completion",
+      "description": "Habit completion record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "habitId": { "type": "string" },
+        "date": { "type": "string", "format": "date" }
+      },
+      "required": ["uid", "habitId", "date"]
+    },
+    "fastingSessions": {
+      "title": "Fasting Session",
+      "description": "Fasting session record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "startTime": { "type": "number" },
+        "endTime": { "type": "number" },
+        "protocol": { "type": "string" },
+        "completed": { "type": "integer" }
+      },
+      "required": ["uid", "startTime", "protocol", "completed"]
+    },
+    "workouts": {
+      "title": "Workout",
+      "description": "Workout session record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "name": { "type": "string" },
+        "duration": { "type": "number" },
+        "completed": { "type": "integer" }
+      },
+      "required": ["uid", "date", "name"]
+    },
+    "chatMessages": {
+      "title": "Chat Message",
+      "description": "AI Coach chat message",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["uid", "role", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User profile document"
+    },
+    "/foodLogs/{logId}": {
+      "schema": "foodLogs",
+      "description": "Food intake records"
+    },
+    "/waterLogs/{logId}": {
+      "schema": "waterLogs",
+      "description": "Water intake records"
+    },
+    "/stepLogs/{logId}": {
+      "schema": "stepLogs",
+      "description": "Step count records"
+    },
+    "/sleepLogs/{logId}": {
+      "schema": "sleepLogs",
+      "description": "Sleep records"
+    },
+    "/vitals/{logId}": {
+      "schema": "vitals",
+      "description": "Vital signs records"
+    },
+    "/bodyMetrics/{logId}": {
+      "schema": "bodyMetrics",
+      "description": "Body metric records"
+    },
+    "/habits/{habitId}": {
+      "schema": "habits",
+      "description": "Habit definitions"
+    },
+    "/habitCompletions/{completionId}": {
+      "schema": "habitCompletions",
+      "description": "Habit completion records"
+    },
+    "/fastingSessions/{sessionId}": {
+      "schema": "fastingSessions",
+      "description": "Fasting session records"
+    },
+    "/workouts/{workoutId}": {
+      "schema": "workouts",
+      "description": "Workout records"
+    },
+    "/chatMessages/{messageId}": {
+      "schema": "chatMessages",
+      "description": "AI Coach chat messages"
+    }
+  }
+}
