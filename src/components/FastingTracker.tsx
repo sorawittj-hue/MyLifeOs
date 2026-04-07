@@ -111,9 +111,9 @@ export default function FastingTracker() {
     let unsubscribe: () => void;
 
     if (firebaseUser) {
-      unsubscribe = firebaseService.subscribeToCollection('fastingSessions', firebaseUser.uid, (data) => {
-        const active = data.find(s => s.completed === 0) as FastingSession | undefined;
-        const completed = data.filter(s => s.completed === 1).sort((a, b) => (b.endTime || 0) - (a.endTime || 0)).slice(0, 10) as FastingSession[];
+      unsubscribe = firebaseService.subscribeToCollection<FastingSession>('fastingSessions', firebaseUser.uid, (data) => {
+        const active = data.find(s => s.completed === 0);
+        const completed = data.filter(s => s.completed === 1).sort((a, b) => (b.endTime || 0) - (a.endTime || 0)).slice(0, 10);
         
         if (active) {
           setActiveSession(active);

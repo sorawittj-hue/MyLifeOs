@@ -26,13 +26,13 @@ export default function CalorieTracker() {
     let unsubscribeWater: () => void;
 
     if (firebaseUser) {
-      unsubscribeFood = firebaseService.subscribeToCollection('foodLogs', firebaseUser.uid, (data) => {
+      unsubscribeFood = firebaseService.subscribeToCollection<FoodLog>('foodLogs', firebaseUser.uid, (data) => {
         const today = format(new Date(), 'yyyy-MM-dd');
-        setFoodLogs(data.filter(d => d.date === today) as FoodLog[]);
+        setFoodLogs(data.filter(d => d.date === today));
       });
-      unsubscribeWater = firebaseService.subscribeToCollection('waterLogs', firebaseUser.uid, (data) => {
+      unsubscribeWater = firebaseService.subscribeToCollection<WaterLog>('waterLogs', firebaseUser.uid, (data) => {
         const today = format(new Date(), 'yyyy-MM-dd');
-        setWaterLogs(data.filter(d => d.date === today) as WaterLog[]);
+        setWaterLogs(data.filter(d => d.date === today));
       });
     } else {
       loadLogs();

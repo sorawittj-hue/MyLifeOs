@@ -111,15 +111,19 @@ export const useAppStore = create<AppState>()(
               ];
 
               for (const col of collections) {
-                const localData = await (db as any)[col].toArray();
-                if (localData.length > 0) {
-                  for (const item of localData) {
-                    // Check if already exists in Firebase (simple check by timestamp or ID if possible)
-                    // For simplicity, we just add them. Firebase rules or logic could handle duplicates.
-                    await firebaseService.addToCollection(col, item);
+                try {
+                  const localData = await (db as any)[col].toArray();
+                  if (localData.length > 0) {
+                    for (const item of localData) {
+                      // For simplicity, we just add them. Firebase rules or logic could handle duplicates.
+                      await firebaseService.addToCollection(col, item);
+                    }
+                    // Clear local data ONLY after all items in this collection are synced successfully
+                    await (db as any)[col].clear();
                   }
-                  // Clear local data after sync to avoid duplicates next time
-                  await (db as any)[col].clear();
+                } catch (error) {
+                  console.error(`Failed to sync collection ${col}:`, error);
+                  // If one collection fails, we continue with others but don't clear the failed one
                 }
               }
             };

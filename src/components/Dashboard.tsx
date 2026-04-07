@@ -10,7 +10,7 @@ import { generateDailyInsight } from '../lib/gemini';
 import { firebaseService } from '../lib/firebaseService';
 
 export default function Dashboard() {
-  const { user, theme, setActiveTab, isGoogleFitConnected, firebaseUser } = useAppStore();
+  const { user, theme, activeTab, setActiveTab, isGoogleFitConnected, firebaseUser } = useAppStore();
   const [stats, setStats] = useState({
     calories: 0,
     water: 0,
@@ -25,32 +25,10 @@ export default function Dashboard() {
   const [isInsightLoading, setIsInsightLoading] = useState(false);
 
   useEffect(() => {
-    let unsubscribeFood: () => void;
-    let unsubscribeWater: () => void;
-    let unsubscribeVitals: () => void;
-    let unsubscribeSteps: () => void;
-    let unsubscribeMetrics: () => void;
-    let unsubscribeSleep: () => void;
-
-    if (firebaseUser) {
-      loadDashboardData(); // Initial load
-      
-      // We could also subscribe for real-time updates on the dashboard
-      // but for simplicity and to avoid too many listeners, we can just reload on change
-      // or use specific listeners for today's data.
-    } else {
+    if (activeTab === 'dashboard') {
       loadDashboardData();
     }
-
-    return () => {
-      unsubscribeFood?.();
-      unsubscribeWater?.();
-      unsubscribeVitals?.();
-      unsubscribeSteps?.();
-      unsubscribeMetrics?.();
-      unsubscribeSleep?.();
-    };
-  }, [firebaseUser]);
+  }, [firebaseUser, activeTab]);
 
   const loadDashboardData = async () => {
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -62,23 +40,23 @@ export default function Dashboard() {
     let steps: StepLog | undefined;
 
     if (firebaseUser) {
-      const foodData = await firebaseService.getCollection('foodLogs', firebaseUser.uid) as any[];
-      foods = foodData.filter(f => f.date === today) as FoodLog[];
+      const foodData = await firebaseService.getCollection<FoodLog>('foodLogs', firebaseUser.uid);
+      foods = foodData.filter(f => f.date === today);
       
-      const waterData = await firebaseService.getCollection('waterLogs', firebaseUser.uid) as any[];
-      water = waterData.filter(w => w.date === today) as WaterLog[];
+      const waterData = await firebaseService.getCollection<WaterLog>('waterLogs', firebaseUser.uid);
+      water = waterData.filter(w => w.date === today);
       
-      const weightData = await firebaseService.getCollection('bodyMetrics', firebaseUser.uid) as any[];
-      weights = weightData.sort((a, b) => a.date.localeCompare(b.date)).slice(-7) as BodyMetric[];
+      const weightData = await firebaseService.getCollection<BodyMetric>('bodyMetrics', firebaseUser.uid);
+      weights = weightData.sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
       
-      const sleepData = await firebaseService.getCollection('sleepLogs', firebaseUser.uid) as any[];
-      sleep = sleepData.find(s => s.date === today) as SleepLog | undefined;
+      const sleepData = await firebaseService.getCollection<SleepLog>('sleepLogs', firebaseUser.uid);
+      sleep = sleepData.find(s => s.date === today);
       
-      const vitalData = await firebaseService.getCollection('vitals', firebaseUser.uid) as any[];
-      vitals = vitalData.filter(v => v.date === today) as Vital[];
+      const vitalData = await firebaseService.getCollection<Vital>('vitals', firebaseUser.uid);
+      vitals = vitalData.filter(v => v.date === today);
       
-      const stepData = await firebaseService.getCollection('stepLogs', firebaseUser.uid) as any[];
-      steps = stepData.find(s => s.date === today) as StepLog | undefined;
+      const stepData = await firebaseService.getCollection<StepLog>('stepLogs', firebaseUser.uid);
+      steps = stepData.find(s => s.date === today);
     } else {
       foods = await db.foodLogs.where('date').equals(today).toArray();
       water = await db.waterLogs.where('date').equals(today).toArray();

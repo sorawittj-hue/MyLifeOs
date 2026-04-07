@@ -32,11 +32,11 @@ export default function BodyMetrics() {
     let unsubscribeVitals: () => void;
 
     if (firebaseUser) {
-      unsubscribeMetrics = firebaseService.subscribeToCollection('bodyMetrics', firebaseUser.uid, (data) => {
-        setMetrics(data.sort((a, b) => a.date.localeCompare(b.date)) as BodyMetric[]);
+      unsubscribeMetrics = firebaseService.subscribeToCollection<BodyMetric>('bodyMetrics', firebaseUser.uid, (data) => {
+        setMetrics(data.sort((a, b) => a.date.localeCompare(b.date)));
       });
-      unsubscribeVitals = firebaseService.subscribeToCollection('vitals', firebaseUser.uid, (data) => {
-        setVitals(data.sort((a, b) => a.date.localeCompare(b.date)) as Vital[]);
+      unsubscribeVitals = firebaseService.subscribeToCollection<Vital>('vitals', firebaseUser.uid, (data) => {
+        setVitals(data.sort((a, b) => a.date.localeCompare(b.date)));
       });
       setUser(storeUser);
     } else {

@@ -90,30 +90,31 @@ export const firebaseService = {
   },
 
   // Generic Collection Methods
-  subscribeToCollection(collectionName: string, uid: string, callback: (data: any[]) => void) {
+  subscribeToCollection<T>(collectionName: string, uid: string, callback: (data: T[]) => void) {
     const path = collectionName;
     const q = query(collection(db, collectionName), where("uid", "==", uid));
     
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
       callback(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, path);
     });
   },
 
-  async getCollection(collectionName: string, uid: string) {
+  async getCollection<T>(collectionName: string, uid: string): Promise<T[]> {
     const path = collectionName;
     try {
       const q = query(collection(db, collectionName), where("uid", "==", uid));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
+      return [];
     }
   },
 
-  async addToCollection(collectionName: string, data: any) {
+  async addToCollection<T>(collectionName: string, data: T) {
     const path = collectionName;
     try {
       const uid = auth.currentUser?.uid;
@@ -125,11 +126,11 @@ export const firebaseService = {
     }
   },
 
-  async updateInCollection(collectionName: string, id: string, data: any) {
+  async updateInCollection<T>(collectionName: string, id: string, data: Partial<T>) {
     const path = `${collectionName}/${id}`;
     try {
       const docRef = doc(db, collectionName, id);
-      await updateDoc(docRef, data);
+      await updateDoc(docRef, data as any);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
     }

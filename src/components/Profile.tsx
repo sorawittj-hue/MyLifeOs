@@ -25,16 +25,16 @@ export default function Profile() {
 
     if (firebaseUser) {
       setIsLoading(true);
-      unsubscribeVitals = firebaseService.subscribeToCollection('vitals', firebaseUser.uid, (data) => {
+      unsubscribeVitals = firebaseService.subscribeToCollection<Vital>('vitals', firebaseUser.uid, (data) => {
         const uniqueVitals: Record<string, Vital> = {};
         data.sort((a, b) => b.date.localeCompare(a.date)).forEach(v => {
-          if (!uniqueVitals[v.type]) uniqueVitals[v.type] = v as Vital;
+          if (!uniqueVitals[v.type]) uniqueVitals[v.type] = v;
         });
         setLatestVitals(Object.values(uniqueVitals));
         setIsLoading(false);
       });
 
-      unsubscribeFood = firebaseService.subscribeToCollection('foodLogs', firebaseUser.uid, (data) => {
+      unsubscribeFood = firebaseService.subscribeToCollection<FoodLog>('foodLogs', firebaseUser.uid, (data) => {
         const todayFood = data.filter(f => f.date === today);
         setTodayNutrition(prev => ({
           ...prev,
@@ -42,7 +42,7 @@ export default function Profile() {
         }));
       });
 
-      unsubscribeWater = firebaseService.subscribeToCollection('waterLogs', firebaseUser.uid, (data) => {
+      unsubscribeWater = firebaseService.subscribeToCollection<WaterLog>('waterLogs', firebaseUser.uid, (data) => {
         const todayWater = data.filter(w => w.date === today);
         setTodayNutrition(prev => ({
           ...prev,

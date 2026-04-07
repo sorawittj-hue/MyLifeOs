@@ -138,33 +138,42 @@ export default function App() {
             {/* Popover Menu */}
             <AnimatePresence>
               {showMore && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className={`absolute bottom-full right-0 mb-4 w-48 border rounded-2xl shadow-2xl transition-all duration-300 p-2 space-y-1 ${
-                    theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
-                  }`}
-                >
-                  {secondaryNav.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        haptics.light();
-                        setActiveTab(item.id);
-                        setShowMore(false);
-                      }}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                        activeTab === item.id 
-                          ? 'bg-green-500 text-black' 
-                          : theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'
-                      }`}
-                    >
-                      <item.icon size={18} />
-                      <span className="text-sm font-bold">{item.label}</span>
-                    </button>
-                  ))}
-                </motion.div>
+                <>
+                  <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowMore(false)} 
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className={`absolute bottom-full right-0 mb-4 w-48 border rounded-2xl shadow-2xl transition-all duration-300 p-2 space-y-1 z-50 ${
+                      theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
+                    }`}
+                  >
+                    {secondaryNav.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          haptics.light();
+                          setActiveTab(item.id);
+                          setShowMore(false);
+                        }}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                          activeTab === item.id 
+                            ? 'bg-green-500 text-black' 
+                            : theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'
+                        }`}
+                      >
+                        <item.icon size={18} />
+                        <span className="text-sm font-bold">{item.label}</span>
+                      </button>
+                    ))}
+                  </motion.div>
+                </>
               )}
             </AnimatePresence>
           </div>

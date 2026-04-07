@@ -19,8 +19,8 @@ export default function SleepTracker() {
     let unsubscribe: () => void;
 
     if (firebaseUser) {
-      unsubscribe = firebaseService.subscribeToCollection('sleepLogs', firebaseUser.uid, (data) => {
-        setLogs(data.sort((a, b) => a.date.localeCompare(b.date)).slice(-7) as SleepLog[]);
+      unsubscribe = firebaseService.subscribeToCollection<SleepLog>('sleepLogs', firebaseUser.uid, (data) => {
+        setLogs(data.sort((a, b) => a.date.localeCompare(b.date)).slice(-7));
       });
     } else {
       loadLogs();
