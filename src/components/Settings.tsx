@@ -4,7 +4,7 @@ import { useAppStore } from '../lib/store';
 import { haptics } from '../lib/haptics';
 import { db } from '../lib/db';
 import { motion, AnimatePresence } from 'motion/react';
-import { requestNotificationPermission, sendNotification } from '../lib/notifications';
+import { requestNotificationPermission, sendNotification, syncNotificationSchedule } from '../lib/notifications';
 import { fetchGoogleFitData } from '../lib/googleFit';
 
 export default function SettingsScreen() {
@@ -78,6 +78,9 @@ export default function SettingsScreen() {
       sendNotification('เปิดการแจ้งเตือนสำเร็จ!', { body: `คุณจะได้รับการแจ้งเตือนเกี่ยวกับ${key === 'water' ? 'การดื่มน้ำ' : key === 'food' ? 'การบันทึกอาหาร' : 'การนอน'}` });
     }
     setNotifications({ [key]: !notifications[key] });
+    // Sync notification scheduling
+    const updated = { ...notifications, [key]: !notifications[key] };
+    syncNotificationSchedule(updated);
   };
 
   // Profile Form State
@@ -152,23 +155,25 @@ export default function SettingsScreen() {
     }
   };
 
-  const cardBg = theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200';
-  const textMuted = theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400';
-  const divideColor = theme === 'dark' ? 'divide-zinc-800' : 'divide-zinc-100';
+  const isDark = theme === 'dark';
+  const cardBg = isDark ? 'glass-card' : 'glass-card-light';
+  const textMuted = isDark ? 'text-zinc-500' : 'text-zinc-400';
+  const divideColor = isDark ? 'divide-white/[0.04]' : 'divide-black/[0.04]';
 
   return (
-    <div className="p-4 space-y-8 pb-32">
+    <div className="p-5 space-y-6 pb-28">
       <header>
-        <h1 className="text-2xl font-bold">การตั้งค่า</h1>
+        <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${textMuted} mb-0.5`}>Settings</p>
+        <h1 className="text-2xl font-bold tracking-tight">การตั้งค่า</h1>
       </header>
 
       {/* Profile Section */}
       <motion.section 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`${cardBg} rounded-3xl border overflow-hidden`}
+        className={`${cardBg} bento-card overflow-hidden`}
       >
-        <div className={`p-6 flex items-center gap-4 border-b ${theme === 'dark' ? 'border-zinc-800' : 'border-zinc-100'}`}>
+        <div className={`p-5 flex items-center gap-4 border-b ${isDark ? 'border-white/[0.04]' : 'border-black/[0.04]'}`}>
           <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center text-black font-bold text-2xl">
             {user?.name?.[0] || (user?.gender === 'male' ? 'M' : 'F')}
           </div>
@@ -178,7 +183,7 @@ export default function SettingsScreen() {
           </div>
           <button 
             onClick={() => setShowEditProfile(true)}
-            className={`ml-auto p-2 rounded-xl transition-colors ${theme === 'dark' ? 'bg-zinc-800 text-zinc-400 hover:text-white' : 'bg-zinc-100 text-zinc-500 hover:text-zinc-900'}`}
+            className={`ml-auto p-2 rounded-xl transition-colors ${isDark ? 'bg-white/[0.06] text-zinc-400 hover:text-white' : 'bg-black/[0.04] text-zinc-500 hover:text-zinc-900'}`}
           >
             <ChevronRight size={20} />
           </button>
@@ -206,7 +211,7 @@ export default function SettingsScreen() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className={`${cardBg} rounded-3xl border divide-y ${divideColor}`}
+          className={`${cardBg} bento-card divide-y ${divideColor}`}
         >
           <div className="p-4 flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -215,13 +220,13 @@ export default function SettingsScreen() {
               </div>
               <span className="font-medium">ธีม</span>
             </div>
-            <div className={`flex p-1 rounded-xl ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'}`}>
+            <div className={`flex p-1 rounded-xl ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]'}`}>
               <button 
                 onClick={() => {
                   haptics.light();
                   setTheme('dark');
                 }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${theme === 'dark' ? 'bg-zinc-700 text-white' : 'text-zinc-500'}`}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${theme === 'dark' ? 'bg-white/[0.1] text-white' : 'text-zinc-500'}`}
               >
                 มืด
               </button>
@@ -243,13 +248,13 @@ export default function SettingsScreen() {
               </div>
               <span className="font-medium">หน่วย</span>
             </div>
-            <div className={`flex p-1 rounded-xl ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'}`}>
+            <div className={`flex p-1 rounded-xl ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]'}`}>
               <button 
                 onClick={() => {
                   haptics.light();
                   setUnits('metric');
                 }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${units === 'metric' ? (theme === 'dark' ? 'bg-zinc-700 text-white' : 'bg-white text-zinc-900 shadow-sm') : 'text-zinc-500'}`}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${units === 'metric' ? (isDark ? 'bg-white/[0.1] text-white' : 'bg-white text-zinc-900 shadow-sm') : 'text-zinc-500'}`}
               >
                 เมตริก
               </button>
@@ -258,7 +263,7 @@ export default function SettingsScreen() {
                   haptics.light();
                   setUnits('imperial');
                 }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${units === 'imperial' ? (theme === 'dark' ? 'bg-zinc-700 text-white' : 'bg-white text-zinc-900 shadow-sm') : 'text-zinc-500'}`}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${units === 'imperial' ? (isDark ? 'bg-white/[0.1] text-white' : 'bg-white text-zinc-900 shadow-sm') : 'text-zinc-500'}`}
               >
                 อิมพีเรียล
               </button>
@@ -288,7 +293,7 @@ export default function SettingsScreen() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className={`${cardBg} rounded-3xl border divide-y ${divideColor}`}
+          className={`${cardBg} bento-card divide-y ${divideColor}`}
         >
           <div className="p-4 flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -305,7 +310,7 @@ export default function SettingsScreen() {
                 haptics.light();
                 setDemoMode(!demoMode);
               }}
-              className={`w-12 h-6 rounded-full relative p-1 transition-colors ${demoMode ? 'bg-yellow-500' : (theme === 'dark' ? 'bg-zinc-700' : 'bg-zinc-200')}`}
+              className={`w-12 h-6 rounded-full relative p-1 transition-colors ${demoMode ? 'bg-yellow-500' : (isDark ? 'bg-white/[0.1]' : 'bg-black/[0.1]')}`}
             >
               <div className={`w-4 h-4 bg-white rounded-full transition-all ${demoMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
             </button>
@@ -326,7 +331,7 @@ export default function SettingsScreen() {
               <div className="flex gap-2">
                 <button 
                   onClick={() => setShowOAuthHelp(true)}
-                  className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-500'}`}
+                  className={`p-2 rounded-lg ${isDark ? 'bg-white/[0.06] text-zinc-400' : 'bg-black/[0.04] text-zinc-500'}`}
                 >
                   <Info size={16} />
                 </button>
@@ -388,11 +393,11 @@ export default function SettingsScreen() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className={`${cardBg} rounded-3xl border divide-y ${divideColor}`}
+          className={`${cardBg} bento-card divide-y ${divideColor}`}
         >
           <button 
             onClick={() => setShowPrivacy(true)}
-            className={`w-full p-4 flex justify-between items-center transition-colors ${theme === 'dark' ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'}`}
+            className={`w-full p-4 flex justify-between items-center transition-colors ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.02]'}`}
           >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-green-500/10 text-green-500 rounded-xl flex items-center justify-center">
@@ -400,24 +405,24 @@ export default function SettingsScreen() {
               </div>
               <span className="font-medium text-left">นโยบายความเป็นส่วนตัว</span>
             </div>
-            <ChevronRight size={20} className={theme === 'dark' ? 'text-zinc-700' : 'text-zinc-300'} />
+            <ChevronRight size={20} className={isDark ? 'text-zinc-700' : 'text-zinc-300'} />
           </button>
           <button 
             onClick={exportData}
             disabled={isExporting}
-            className={`w-full p-4 flex justify-between items-center transition-colors disabled:opacity-50 ${theme === 'dark' ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'}`}
+            className={`w-full p-4 flex justify-between items-center transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.02]'}`}
           >
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-500'}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-white/[0.06] text-zinc-400' : 'bg-black/[0.04] text-zinc-500'}`}>
                 <Download size={20} />
               </div>
               <span className="font-medium text-left">{isExporting ? 'กำลังส่งออก...' : 'ส่งออกข้อมูล (JSON)'}</span>
             </div>
-            <ChevronRight size={20} className={theme === 'dark' ? 'text-zinc-700' : 'text-zinc-300'} />
+            <ChevronRight size={20} className={isDark ? 'text-zinc-700' : 'text-zinc-300'} />
           </button>
           <button 
             onClick={() => setShowClearConfirm(true)}
-            className={`w-full p-4 flex justify-between items-center transition-colors group ${theme === 'dark' ? 'hover:bg-red-500/5' : 'hover:bg-red-50'}`}
+            className={`w-full p-4 flex justify-between items-center transition-colors group ${isDark ? 'hover:bg-red-500/[0.04]' : 'hover:bg-red-50'}`}
           >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center">
@@ -430,8 +435,8 @@ export default function SettingsScreen() {
       </section>
 
       <div className="text-center space-y-1">
-        <p className={`text-xs ${theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'} font-bold uppercase tracking-widest`}>LifeOS v1.0.0</p>
-        <p className={`text-[10px] ${theme === 'dark' ? 'text-zinc-700' : 'text-zinc-500'}`}>สร้างด้วย ❤️ เพื่อสุขภาพของคุณ</p>
+        <p className={`text-xs ${isDark ? 'text-zinc-600' : 'text-zinc-400'} font-bold uppercase tracking-widest`}>LifeOS v1.0.0</p>
+        <p className={`text-[10px] ${isDark ? 'text-zinc-700' : 'text-zinc-500'}`}>สร้างด้วย ❤️ เพื่อสุขภาพของคุณ</p>
       </div>
 
       <motion.button 
@@ -439,9 +444,9 @@ export default function SettingsScreen() {
         whileTap={{ scale: 0.98 }}
         onClick={handleLogout}
         className={`w-full border font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors ${
-          theme === 'dark' 
-            ? 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800' 
-            : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+          isDark 
+            ? 'glass-card text-zinc-400 hover:bg-white/[0.06]' 
+            : 'glass-card-light text-zinc-500 hover:bg-black/[0.04]'
         }`}
       >
         <LogOut size={18} />
@@ -451,12 +456,13 @@ export default function SettingsScreen() {
       {/* OAuth Help Modal */}
       <AnimatePresence>
         {showOAuthHelp && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowOAuthHelp(false)}>
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`w-full max-w-md rounded-[32px] p-8 border space-y-6 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}
+              className={`w-full max-w-md rounded-[2rem] p-6 space-y-5 ${isDark ? 'bg-[#141414] border border-white/[0.06]' : 'bg-white border border-black/[0.06] shadow-2xl'}`}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-bold">วิธีตั้งค่า Google Fit</h2>
@@ -465,7 +471,7 @@ export default function SettingsScreen() {
                 </button>
               </div>
               
-              <div className={`space-y-4 text-sm ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              <div className={`space-y-4 text-sm ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
                 <p className="text-red-500 font-bold">⚠️ สำคัญ: เพื่อความปลอดภัย ห้ามแชร์รหัสผ่าน Gmail ให้ใครเด็ดขาด ผมไม่สามารถเข้าถึงบัญชีของคุณเพื่อตั้งค่าให้ได้ คุณต้องทำตามขั้นตอนสั้นๆ นี้ครับ:</p>
                 
                 <div className="space-y-2">
@@ -480,7 +486,7 @@ export default function SettingsScreen() {
 
                 <div className="space-y-2">
                   <p className="font-bold text-white">3. ใส่ Redirect URI</p>
-                  <div className={`p-2 rounded-lg font-mono text-[10px] break-all ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'}`}>
+                  <div className={`p-2 rounded-lg font-mono text-[10px] break-all ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]'}`}>
                     {window.location.origin}/auth/callback
                   </div>
                 </div>
@@ -497,7 +503,7 @@ export default function SettingsScreen() {
 
               <button 
                 onClick={() => setShowOAuthHelp(false)}
-                className={`w-full font-bold py-4 rounded-2xl transition-colors ${theme === 'dark' ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'}`}
+                className={`w-full font-bold py-4 rounded-2xl transition-colors ${isDark ? 'bg-white/[0.06] text-white hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-900 hover:bg-black/[0.06]'}`}
               >
                 เข้าใจแล้ว
               </button>
@@ -507,12 +513,13 @@ export default function SettingsScreen() {
       </AnimatePresence>
       <AnimatePresence>
         {showEditProfile && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowEditProfile(false)}>
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`w-full max-w-md rounded-[32px] p-8 border space-y-6 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}
+              className={`w-full max-w-md rounded-[2rem] p-6 space-y-5 ${isDark ? 'bg-[#141414] border border-white/[0.06]' : 'bg-white border border-black/[0.06] shadow-2xl'}`}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">แก้ไขข้อมูลส่วนตัว</h2>
@@ -528,7 +535,7 @@ export default function SettingsScreen() {
                     type="text"
                     value={profileForm.name}
                     onChange={e => setProfileForm({...profileForm, name: e.target.value})}
-                    className={`w-full border-none rounded-xl p-3 focus:ring-2 focus:ring-green-500 outline-none ${theme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-900'}`}
+                    className={`w-full rounded-xl p-3 outline-none focus:ring-2 focus:ring-green-500 ${isDark ? 'input-premium text-white' : 'input-premium-light text-zinc-900'}`}
                     placeholder="ใส่ชื่อของคุณ"
                   />
                 </div>
@@ -601,7 +608,7 @@ export default function SettingsScreen() {
 
               <button 
                 onClick={handleSaveProfile}
-                className="w-full bg-green-500 text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"
               >
                 <Save size={20} />
                 บันทึกการเปลี่ยนแปลง
@@ -614,12 +621,13 @@ export default function SettingsScreen() {
       {/* Privacy Policy Modal */}
       <AnimatePresence>
         {showPrivacy && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowPrivacy(false)}>
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`w-full max-w-md rounded-[32px] p-8 border space-y-6 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}
+              className={`w-full max-w-md rounded-[2rem] p-6 space-y-5 ${isDark ? 'bg-[#141414] border border-white/[0.06]' : 'bg-white border border-black/[0.06] shadow-2xl'}`}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">นโยบายความเป็นส่วนตัว</h2>
@@ -627,18 +635,18 @@ export default function SettingsScreen() {
                   <X size={24} />
                 </button>
               </div>
-              <div className={`max-h-[60vh] overflow-y-auto pr-2 space-y-4 text-sm leading-relaxed ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              <div className={`max-h-[60vh] overflow-y-auto pr-2 space-y-4 text-sm leading-relaxed ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
                 <p>LifeOS ให้ความสำคัญกับความเป็นส่วนตัวของคุณ ข้อมูลทั้งหมดของคุณจะถูกเก็บไว้ในอุปกรณ์ของคุณเท่านั้น (Local Storage) และไม่มีการส่งข้อมูลไปยังเซิร์ฟเวอร์ภายนอก</p>
-                <h3 className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>1. การเก็บรวบรวมข้อมูล</h3>
+                <h3 className={`font-bold ${isDark ? 'text-white' : 'text-zinc-900'}`}>1. การเก็บรวบรวมข้อมูล</h3>
                 <p>เราเก็บข้อมูลสุขภาพพื้นฐาน เช่น อายุ น้ำหนัก ส่วนสูง และบันทึกกิจกรรมประจำวันของคุณเพื่อใช้ในการคำนวณและแสดงผลสถิติ</p>
-                <h3 className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>2. การใช้งานข้อมูล</h3>
+                <h3 className={`font-bold ${isDark ? 'text-white' : 'text-zinc-900'}`}>2. การใช้งานข้อมูล</h3>
                 <p>ข้อมูลจะถูกใช้เพื่อช่วยให้คุณติดตามสุขภาพและบรรลุเป้าหมายที่ตั้งไว้เท่านั้น</p>
-                <h3 className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>3. การควบคุมข้อมูล</h3>
+                <h3 className={`font-bold ${isDark ? 'text-white' : 'text-zinc-900'}`}>3. การควบคุมข้อมูล</h3>
                 <p>คุณสามารถลบข้อมูลทั้งหมดได้ตลอดเวลาผ่านเมนู "ลบข้อมูลทั้งหมด" ในหน้าการตั้งค่านี้</p>
               </div>
               <button 
                 onClick={() => setShowPrivacy(false)}
-                className={`w-full font-bold py-4 rounded-2xl transition-colors ${theme === 'dark' ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'}`}
+                className={`w-full font-bold py-4 rounded-2xl transition-colors ${isDark ? 'bg-white/[0.06] text-white hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-900 hover:bg-black/[0.06]'}`}
               >
                 รับทราบ
               </button>
@@ -650,12 +658,13 @@ export default function SettingsScreen() {
       {/* Notifications Modal */}
       <AnimatePresence>
         {showNotifications && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowNotifications(false)}>
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`w-full max-w-md rounded-[32px] p-8 border space-y-6 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}
+              className={`w-full max-w-md rounded-[2rem] p-6 space-y-5 ${isDark ? 'bg-[#141414] border border-white/[0.06]' : 'bg-white border border-black/[0.06] shadow-2xl'}`}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">การแจ้งเตือน</h2>
@@ -671,14 +680,14 @@ export default function SettingsScreen() {
                 ].map((notif) => {
                   const isActive = notifications[notif.id as keyof typeof notifications];
                   return (
-                    <div key={notif.id} className={`p-4 rounded-2xl border flex items-center justify-between ${theme === 'dark' ? 'bg-zinc-800/50 border-zinc-800' : 'bg-zinc-50 border-zinc-100'}`}>
+                    <div key={notif.id} className={`p-4 rounded-2xl flex items-center justify-between ${isDark ? 'bg-white/[0.03] border border-white/[0.04]' : 'bg-black/[0.02] border border-black/[0.04]'}`}>
                       <div>
                         <p className="font-bold">{notif.title}</p>
                         <p className={`text-xs ${textMuted}`}>{notif.desc}</p>
                       </div>
                       <button 
                         onClick={() => toggleNotification(notif.id as keyof typeof notifications)}
-                        className={`w-12 h-6 rounded-full relative p-1 transition-colors ${isActive ? 'bg-green-500' : (theme === 'dark' ? 'bg-zinc-700' : 'bg-zinc-200')}`}
+                        className={`w-12 h-6 rounded-full relative p-1 transition-colors ${isActive ? 'bg-green-500' : (isDark ? 'bg-white/[0.1]' : 'bg-black/[0.1]')}`}
                       >
                         <div className={`w-4 h-4 bg-white rounded-full transition-all ${isActive ? 'translate-x-6' : 'translate-x-0'}`}></div>
                       </button>
@@ -688,7 +697,7 @@ export default function SettingsScreen() {
               </div>
               <button 
                 onClick={() => setShowNotifications(false)}
-                className={`w-full font-bold py-4 rounded-2xl transition-colors ${theme === 'dark' ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'}`}
+                className={`w-full font-bold py-4 rounded-2xl transition-colors ${isDark ? 'bg-white/[0.06] text-white hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-900 hover:bg-black/[0.06]'}`}
               >
                 ปิด
               </button>
@@ -700,12 +709,13 @@ export default function SettingsScreen() {
       {/* Clear Data Confirmation Modal */}
       <AnimatePresence>
         {showClearConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowClearConfirm(false)}>
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`w-full max-w-sm rounded-[32px] p-8 border space-y-6 text-center ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}
+              className={`w-full max-w-sm rounded-[2rem] p-6 space-y-5 text-center ${isDark ? 'bg-[#141414] border border-white/[0.06]' : 'bg-white border border-black/[0.06] shadow-2xl'}`}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="w-20 h-20 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto">
                 <Trash2 size={40} />
@@ -717,7 +727,7 @@ export default function SettingsScreen() {
               <div className="grid grid-cols-2 gap-3">
                 <button 
                   onClick={() => setShowClearConfirm(false)}
-                  className={`font-bold py-4 rounded-2xl transition-colors ${theme === 'dark' ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'}`}
+                  className={`font-bold py-4 rounded-2xl transition-colors ${isDark ? 'bg-white/[0.06] text-white hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-900 hover:bg-black/[0.06]'}`}
                 >
                   ยกเลิก
                 </button>

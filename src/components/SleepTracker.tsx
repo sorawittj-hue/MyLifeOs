@@ -9,6 +9,7 @@ import { firebaseService } from '../lib/firebaseService';
 
 export default function SleepTracker() {
   const { theme, firebaseUser } = useAppStore();
+  const isDark = theme === 'dark';
   const [logs, setLogs] = useState<SleepLog[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [bedtime, setBedtime] = useState('22:00');
@@ -78,16 +79,19 @@ export default function SleepTracker() {
     ? (chartData.reduce((s, d) => s + d.hours, 0) / chartData.length).toFixed(1)
     : '0';
 
-  const cardBg = theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200';
-  const textMuted = theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400';
-  const inputBg = theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100';
-  const tooltipBg = theme === 'dark' ? '#18181b' : '#ffffff';
-  const tooltipText = theme === 'dark' ? '#f4f4f5' : '#18181b';
+  const cardBg = isDark ? 'glass-card' : 'glass-card-light';
+  const textMuted = isDark ? 'text-zinc-500' : 'text-zinc-400';
+  const inputBg = isDark ? 'input-premium text-white' : 'input-premium-light text-zinc-900';
+  const tooltipBg = isDark ? '#18181b' : '#ffffff';
+  const tooltipText = isDark ? '#f4f4f5' : '#18181b';
 
   return (
-    <div className="p-4 space-y-6 pb-24">
+    <div className="p-5 space-y-5 pb-28">
       <header className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">การนอนหลับ</h1>
+        <div>
+          <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${textMuted} mb-0.5`}>Sleep</p>
+          <h1 className="text-2xl font-bold tracking-tight">การนอนหลับ</h1>
+        </div>
         <motion.button 
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
@@ -102,7 +106,7 @@ export default function SleepTracker() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`${cardBg} p-6 rounded-3xl border flex justify-between items-center shadow-sm`}
+        className={`${cardBg} p-5 bento-card flex justify-between items-center`}
       >
         <div className="space-y-1">
           <p className={`${textMuted} text-xs font-bold uppercase tracking-widest`}>นอนเฉลี่ย</p>
@@ -113,7 +117,7 @@ export default function SleepTracker() {
         </div>
         <div className="text-right space-y-1">
           <p className={`${textMuted} text-xs font-bold uppercase tracking-widest`}>หนี้การนอน</p>
-          <h2 className="text-2xl font-bold text-red-500">-1.5 <span className={`text-xs ${textMuted} font-normal`}>ชม.</span></h2>
+          <h2 className={`text-2xl font-bold ${parseFloat(avgSleep) >= 8 ? 'text-green-500' : 'text-red-500'}`}>{(parseFloat(avgSleep) - 8).toFixed(1)} <span className={`text-xs ${textMuted} font-normal`}>ชม.</span></h2>
         </div>
       </motion.div>
 
@@ -122,7 +126,7 @@ export default function SleepTracker() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className={`${cardBg} p-6 rounded-3xl border space-y-4 shadow-sm`}
+        className={`${cardBg} p-5 bento-card space-y-4`}
       >
         <h3 className="font-bold flex items-center gap-2">
           <TrendingUp size={18} className="text-green-500" />
@@ -154,14 +158,18 @@ export default function SleepTracker() {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.2 }}
-        className={`p-5 rounded-3xl space-y-2 border ${theme === 'dark' ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-50 border-blue-100'}`}
+        className={`p-5 bento-card space-y-2 ${isDark ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-100'}`}
       >
         <div className="flex items-center gap-2 text-blue-500">
           <Moon size={18} />
           <h3 className="font-bold text-sm uppercase tracking-wider">เคล็ดลับการนอน</h3>
         </div>
-        <p className={`text-sm leading-relaxed ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-600'}`}>
-          ความสม่ำเสมอในการนอนของคุณคือ 85% พยายามตื่นเวลาเดิมให้ห่างกันไม่เกิน 30 นาที แม้ในวันหยุด เพื่อรักษานาฬิกาชีวิตที่ดีขึ้น
+        <p className={`text-sm leading-relaxed ${isDark ? 'text-zinc-300' : 'text-zinc-600'}`}>
+          {parseFloat(avgSleep) < 7
+            ? 'คุณนอนน้อยกว่าเกณฑ์! ลองวางมือถือก่อนนอน 30 นาที และเข้านอนให้เร็วขึ้นครับ'
+            : parseFloat(avgSleep) >= 8
+            ? 'เยี่ยมมาก! คุณนอนได้เพียงพอ คงความสม่ำเสมอนี้ไว้เพื่อสุขภาพที่ดีครับ'
+            : 'คุณนอนใกล้เป้าหมายแล้ว! พยายามตื่นเวลาเดิมให้ห่างกันไม่เกิน 30 นาที แม้ในวันหยุดครับ'}
         </p>
       </motion.div>
 
@@ -176,10 +184,10 @@ export default function SleepTracker() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
-                className={`${cardBg} p-4 rounded-2xl border flex justify-between items-center shadow-sm`}
+                className={`${cardBg} p-3.5 bento-card flex justify-between items-center`}
               >
                 <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-500'}`}>
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.03]'} ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
                     <Moon size={18} />
                   </div>
                   <div>
@@ -193,7 +201,7 @@ export default function SleepTracker() {
                   <p className="font-bold">{calculateDuration(log.bedtime, log.wakeTime).toFixed(1)} <span className={`text-[10px] font-normal ${textMuted}`}>ชม.</span></p>
                   <div className="flex gap-0.5 justify-end">
                     {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} size={8} className={i < log.quality ? 'text-yellow-500 fill-yellow-500' : (theme === 'dark' ? 'text-zinc-800' : 'text-zinc-200')} />
+                      <Star key={i} size={8} className={i < log.quality ? 'text-yellow-500 fill-yellow-500' : (isDark ? 'text-zinc-800' : 'text-zinc-200')} />
                     ))}
                   </div>
                 </div>
@@ -206,13 +214,14 @@ export default function SleepTracker() {
       {/* Add Modal */}
       <AnimatePresence>
         {showAdd && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="fixed inset-0 modal-backdrop z-50 flex items-end sm:items-center justify-center p-4" onClick={() => setShowAdd(false)}>
             <motion.div 
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className={`w-full max-w-md rounded-t-3xl sm:rounded-3xl border p-6 space-y-6 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}
+              className={`w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] p-6 space-y-5 ${isDark ? 'bg-[#141414] border border-white/[0.06]' : 'bg-white border border-black/[0.06] shadow-2xl'}`}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-bold">บันทึกการนอน</h2>
@@ -226,7 +235,7 @@ export default function SleepTracker() {
                       type="time" 
                       value={bedtime}
                       onChange={e => setBedtime(e.target.value)}
-                      className={`w-full border-none rounded-xl p-4 outline-none focus:ring-2 focus:ring-green-500 ${inputBg} ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}
+                      className={`w-full ${inputBg} rounded-xl p-4 outline-none focus:ring-2 focus:ring-green-500`}
                     />
                   </div>
                   <div className="space-y-1">
@@ -251,7 +260,7 @@ export default function SleepTracker() {
                         className={`flex-1 py-3 rounded-xl border transition-all ${
                           quality === q 
                             ? 'bg-green-500 border-green-500 text-black' 
-                            : theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-500' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                            : isDark ? 'bg-white/[0.04] border-white/[0.06] text-zinc-500' : 'bg-black/[0.03] border-black/[0.06] text-zinc-500'
                         }`}
                       >
                         {q}
@@ -264,7 +273,7 @@ export default function SleepTracker() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={addLog}
-                className="w-full bg-green-500 text-black font-bold py-4 rounded-2xl shadow-lg shadow-green-500/20"
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-black font-bold py-4 rounded-2xl shadow-lg shadow-green-500/20"
               >
                 บันทึกข้อมูล
               </motion.button>

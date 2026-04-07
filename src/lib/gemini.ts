@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { User, FoodLog, BodyMetric, Vital } from "./db";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 export interface AICoachContext {
   user: User | null;
@@ -11,6 +12,7 @@ export interface AICoachContext {
 }
 
 export async function getAICoachResponse(prompt: string, context: AICoachContext) {
+  if (!ai) return "กรุณาตั้งค่า VITE_GEMINI_API_KEY ในไฟล์ .env เพื่อใช้งาน AI Coach";
   try {
     const model = "gemini-3-flash-preview";
     const systemInstruction = `You are LifeOS AI Health Coach, a world-class health and longevity expert.
@@ -45,6 +47,7 @@ export async function getAICoachResponse(prompt: string, context: AICoachContext
 }
 
 export async function generateDailyInsight(context: any) {
+  if (!ai) return "ลองดื่มน้ำเพิ่มขึ้นอีกนิดในวันนี้ เพื่อช่วยให้ร่างกายสดชื่นและเผาผลาญได้ดีขึ้นครับ";
   try {
     const model = "gemini-3-flash-preview";
     const systemInstruction = `You are LifeOS AI Health Coach.

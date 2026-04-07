@@ -90,6 +90,7 @@ const PROTOCOLS: ProtocolInfo[] = [
 
 export default function FastingTracker() {
   const { theme, firebaseUser } = useAppStore();
+  const isDark = theme === 'dark';
   const [activeSession, setActiveSession] = useState<FastingSession | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [selectedProtocolId, setSelectedProtocolId] = useState('16:8');
@@ -203,12 +204,12 @@ export default function FastingTracker() {
   const targetSeconds = currentProtocol.fastHours * 3600;
   const progress = Math.min((elapsed / targetSeconds) * 100, 100);
 
-  const cardBg = theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200';
-  const textMuted = theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400';
-  const textMain = theme === 'dark' ? 'text-white' : 'text-zinc-900';
+  const cardBg = isDark ? 'glass-card' : 'glass-card-light';
+  const textMuted = isDark ? 'text-zinc-500' : 'text-zinc-400';
+  const textMain = isDark ? 'text-white' : 'text-zinc-900';
 
   return (
-    <div className="p-4 space-y-6 pb-24">
+    <div className="p-5 space-y-5 pb-28">
       <header className="flex justify-between items-end">
         <div>
           <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted} mb-1`}>Intermittent Fasting</p>
@@ -239,7 +240,7 @@ export default function FastingTracker() {
       {/* Protocol Info Card */}
       <motion.div 
         layout
-        className={`${cardBg} rounded-3xl border p-5 space-y-4 relative overflow-hidden`}
+        className={`${cardBg} bento-card p-5 space-y-4`}
       >
         <div className="flex justify-between items-start">
           <div className="space-y-1">
@@ -256,14 +257,14 @@ export default function FastingTracker() {
               haptics.light();
               setShowInfo(!showInfo);
             }}
-            className={`p-2 rounded-xl ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'} text-zinc-500`}
+            className={`p-2 rounded-xl ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]'} text-zinc-500`}
           >
             <Info size={18} />
           </button>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className={`p-3 rounded-2xl ${theme === 'dark' ? 'bg-zinc-800/50' : 'bg-zinc-50'} border border-transparent`}>
+          <div className={`p-3 rounded-2xl ${isDark ? 'bg-white/[0.03]' : 'bg-black/[0.02]'} border border-transparent`}>
             <div className="flex items-center gap-2 text-blue-500 mb-1">
               <Moon size={14} />
               <span className="text-[10px] font-bold uppercase tracking-wider">ช่วงอด (Fasting)</span>
@@ -296,7 +297,7 @@ export default function FastingTracker() {
                   className={`flex-1 py-2 rounded-xl text-[10px] font-bold transition-all border ${
                     selectedWindowId === w.id 
                       ? 'bg-green-500 border-green-500 text-black' 
-                      : theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-400' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                      : isDark ? 'bg-white/[0.04] border-white/[0.06] text-zinc-400' : 'bg-black/[0.03] border-black/[0.06] text-zinc-500'
                   }`}
                 >
                   {w.label}
@@ -345,7 +346,7 @@ export default function FastingTracker() {
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className={`relative flex flex-col items-center justify-center py-12 rounded-[40px] border overflow-hidden shadow-xl shadow-black/5 ${cardBg}`}
+        className={`relative flex flex-col items-center justify-center py-12 bento-card overflow-hidden ${cardBg}`}
       >
         <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
            <motion.div 
@@ -407,7 +408,7 @@ export default function FastingTracker() {
               <span>ความคืบหน้า</span>
               <span className="text-green-500">{Math.round(progress)}%</span>
             </div>
-            <div className={`h-3 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'}`}>
+            <div className={`h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.06]'}`}>
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
@@ -422,7 +423,7 @@ export default function FastingTracker() {
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className={`${cardBg} p-5 rounded-3xl border space-y-2 shadow-sm`}
+          className={`${cardBg} p-4 bento-card space-y-2`}
         >
           <div className="flex items-center gap-2 text-orange-500">
             <Flame size={18} />
@@ -459,10 +460,10 @@ export default function FastingTracker() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              className={`${cardBg} p-4 rounded-2xl border flex justify-between items-center shadow-sm`}
+              className={`${cardBg} p-3.5 bento-card flex justify-between items-center`}
             >
               <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-50'} text-green-500`}>
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isDark ? 'bg-green-500/10' : 'bg-green-50'} text-green-500`}>
                   <Clock size={20} />
                 </div>
                 <div>
@@ -482,7 +483,7 @@ export default function FastingTracker() {
             </motion.div>
           ))}
           {history.length === 0 && (
-            <div className={`text-center py-12 rounded-3xl border border-dashed ${theme === 'dark' ? 'text-zinc-500 bg-zinc-900/50 border-zinc-800' : 'text-zinc-400 bg-zinc-50 border-zinc-200'}`}>
+            <div className={`text-center py-12 rounded-[1.75rem] border border-dashed ${isDark ? 'text-zinc-600 bg-white/[0.02] border-white/[0.06]' : 'text-zinc-400 bg-black/[0.02] border-black/[0.06]'}`}>
               <Timer size={32} className="mx-auto mb-3 opacity-20" />
               <p className="text-sm font-medium">ยังไม่มีประวัติการทำ IF</p>
               <p className="text-xs opacity-60">เริ่มอดอาหารเพื่อบันทึกสถิติแรกของคุณ</p>

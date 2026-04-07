@@ -5,10 +5,10 @@ export async function seedDatabase() {
   const habitsCount = await db.habits.count();
   if (habitsCount === 0) {
     await db.habits.bulkAdd([
-      { name: 'Drink 2L Water', frequency: 'daily', color: '#3b82f6', icon: 'droplet', createdAt: Date.now() },
-      { name: '10k Steps', frequency: 'daily', color: '#22c55e', icon: 'footprints', createdAt: Date.now() },
-      { name: 'Take Vitamins', frequency: 'daily', color: '#eab308', icon: 'pill', createdAt: Date.now() },
-      { name: 'No Sugar', frequency: 'daily', color: '#ef4444', icon: 'x-circle', createdAt: Date.now() },
+      { name: 'ดื่มน้ำ 2 ลิตร', frequency: 'daily', color: '#3b82f6', icon: 'droplet', createdAt: Date.now() },
+      { name: 'เดิน 10,000 ก้าว', frequency: 'daily', color: '#22c55e', icon: 'footprints', createdAt: Date.now() },
+      { name: 'ทานวิตามิน', frequency: 'daily', color: '#eab308', icon: 'pill', createdAt: Date.now() },
+      { name: 'งดน้ำตาล', frequency: 'daily', color: '#ef4444', icon: 'x-circle', createdAt: Date.now() },
     ]);
   }
 

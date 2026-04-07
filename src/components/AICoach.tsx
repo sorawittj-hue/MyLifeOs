@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, Zap } from 'lucide-react';
 import { db, type ChatMessage } from '../lib/db';
 import { getAICoachResponse, type AICoachContext } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
@@ -13,6 +13,7 @@ export default function AICoach() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isDark = theme === 'dark';
 
   useEffect(() => {
     let unsubscribe: () => void;
@@ -37,6 +38,12 @@ export default function AICoach() {
 
     return () => unsubscribe?.();
   }, [firebaseUser]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isLoading]);
 
   const loadMessages = async () => {
     const msgs = await db.chatMessages.orderBy('timestamp').toArray();
@@ -76,7 +83,6 @@ export default function AICoach() {
         await db.chatMessages.add(userMsg);
       }
       
-      // Gather context for AI
       const today = new Date().toISOString().split('T')[0];
       let foodLogs: any[] = [];
       let bodyMetrics: any[] = [];
@@ -120,51 +126,61 @@ export default function AICoach() {
     }
   };
 
-  const headerBg = theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white/80 border-zinc-200';
-  const chatBg = theme === 'dark' ? 'bg-black' : 'bg-zinc-50';
-  const inputContainerBg = theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-zinc-200';
-  const inputBg = theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100';
-  const textMuted = theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400';
+  const textMuted = isDark ? 'text-zinc-500' : 'text-zinc-400';
 
   return (
-    <div className={`flex flex-col h-[calc(100vh-80px)] ${chatBg}`}>
-      <header className={`p-4 border-b backdrop-blur-md flex items-center gap-3 ${headerBg}`}>
-        <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-black">
-          <Bot size={24} />
+    <div className={`flex flex-col h-[calc(100vh-80px)] ${isDark ? 'bg-[#0a0a0a]' : 'bg-[#f5f5f7]'}`}>
+      {/* Premium Header */}
+      <header className={`p-4 flex items-center gap-3 relative ${
+        isDark ? 'bg-[#0a0a0a]/80 border-b border-white/[0.04]' : 'bg-white/80 border-b border-black/[0.04]'
+      }`}
+        style={{ backdropFilter: 'blur(24px) saturate(180%)' }}
+      >
+        <div className="relative">
+          <div className={`w-10 h-10 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center text-black shadow-lg shadow-green-500/20`}>
+            <Bot size={20} />
+          </div>
+          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[#0a0a0a] animate-pulse" />
         </div>
         <div>
-          <h1 className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>โค้ชสุขภาพ AI</h1>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>ออนไลน์ • Gemini Flash</span>
+          <h1 className="font-bold text-sm">โค้ชสุขภาพ AI</h1>
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[9px] font-semibold uppercase tracking-wider ${textMuted}`}>ออนไลน์ • Gemini Flash</span>
           </div>
         </div>
       </header>
 
+      {/* Chat Area */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth"
+        className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth"
       >
         <AnimatePresence initial={false}>
           {messages.map((msg, i) => (
             <motion.div 
               key={i} 
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`max-w-[85%] flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${
-                  msg.role === 'user' ? (theme === 'dark' ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-200 text-zinc-500') : 'bg-green-500/10 text-green-500'
-                }`}>
-                  {msg.role === 'user' ? <User size={16} /> : <Sparkles size={16} />}
-                </div>
-                <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${
+              <div className={`max-w-[85%] flex gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                <div className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center ${
                   msg.role === 'user' 
-                    ? 'bg-green-500 text-black font-medium rounded-tr-none' 
-                    : `${theme === 'dark' ? 'bg-zinc-900 text-zinc-200 border-zinc-800' : 'bg-white text-zinc-800 border-zinc-200'} border rounded-tl-none`
+                    ? (isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]') 
+                    : 'bg-gradient-to-br from-green-400/20 to-emerald-500/20'
                 }`}>
-                  <div className={`prose prose-sm max-w-none ${theme === 'dark' ? 'prose-invert' : ''}`}>
+                  {msg.role === 'user' 
+                    ? <User size={13} className={isDark ? 'text-zinc-400' : 'text-zinc-500'} /> 
+                    : <Sparkles size={13} className={isDark ? 'text-green-400' : 'text-green-500'} />
+                  }
+                </div>
+                <div className={`p-3.5 text-[13px] leading-relaxed ${
+                  msg.role === 'user' 
+                    ? 'bg-gradient-to-br from-green-500 to-emerald-500 text-black font-medium rounded-2xl rounded-tr-md shadow-lg shadow-green-500/10' 
+                    : `${isDark ? 'glass-card text-zinc-200' : 'glass-card-light text-zinc-700'} rounded-2xl rounded-tl-md`
+                }`}>
+                  <div className={`prose prose-sm max-w-none ${isDark ? 'prose-invert' : ''} ${msg.role === 'user' ? 'prose-p:text-black prose-strong:text-black prose-li:text-black' : ''}`}>
                     <ReactMarkdown>
                       {msg.content}
                     </ReactMarkdown>
@@ -174,21 +190,35 @@ export default function AICoach() {
             </motion.div>
           ))}
         </AnimatePresence>
+        
+        {/* Typing Indicator */}
         {isLoading && (
           <motion.div 
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex justify-start"
           >
-            <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center">
-                <Loader2 size={16} className="animate-spin" />
+            <div className="flex gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-green-400/20 to-emerald-500/20 flex items-center justify-center">
+                <Loader2 size={13} className="text-green-400 animate-spin" />
               </div>
-              <div className={`p-4 rounded-2xl border rounded-tl-none ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}>
-                <div className="flex gap-1">
-                  <div className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-bounce" />
-                  <div className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <div className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-bounce [animation-delay:0.4s]" />
+              <div className={`p-3.5 rounded-2xl rounded-tl-md ${isDark ? 'glass-card' : 'glass-card-light'}`}>
+                <div className="flex gap-1.5 items-center">
+                  <motion.div 
+                    className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-zinc-500' : 'bg-zinc-400'}`}
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
+                  />
+                  <motion.div 
+                    className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-zinc-500' : 'bg-zinc-400'}`}
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0.15 }}
+                  />
+                  <motion.div 
+                    className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-zinc-500' : 'bg-zinc-400'}`}
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0.3 }}
+                  />
                 </div>
               </div>
             </div>
@@ -196,42 +226,53 @@ export default function AICoach() {
         )}
       </div>
 
-      <div className={`p-4 border-t pb-24 ${inputContainerBg}`}>
+      {/* Input Area */}
+      <div className={`p-4 pb-28 ${
+        isDark ? 'bg-[#0a0a0a]/80 border-t border-white/[0.04]' : 'bg-white/80 border-t border-black/[0.04]'
+      }`}
+        style={{ backdropFilter: 'blur(24px) saturate(180%)' }}
+      >
         <div className="relative">
           <input 
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && sendMessage()}
-            placeholder="ถามอะไรก็ได้เกี่ยวกับสุขภาพของคุณ..."
-            className={`w-full border-none rounded-2xl py-4 pl-4 pr-14 outline-none focus:ring-2 focus:ring-green-500 ${inputBg} ${theme === 'dark' ? 'text-white placeholder:text-zinc-500' : 'text-zinc-900 placeholder:text-zinc-400'}`}
+            placeholder="ถามอะไรก็ได้เกี่ยวกับสุขภาพ..."
+            className={`w-full rounded-2xl py-3.5 pl-4 pr-14 outline-none text-sm ${
+              isDark 
+                ? 'input-premium text-white placeholder:text-zinc-600' 
+                : 'input-premium-light text-zinc-900 placeholder:text-zinc-400'
+            }`}
           />
           <motion.button 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={sendMessage}
             disabled={!input.trim() || isLoading}
-            className="absolute right-2 top-2 bottom-2 w-10 bg-green-500 rounded-xl flex items-center justify-center text-black disabled:opacity-50 disabled:bg-zinc-700 transition-all"
+            className="absolute right-1.5 top-1.5 bottom-1.5 w-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center text-black disabled:opacity-30 disabled:from-zinc-700 disabled:to-zinc-700 transition-all shadow-lg shadow-green-500/10"
           >
-            <Send size={18} />
+            <Send size={16} />
           </motion.button>
         </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+        
+        {/* Quick prompts */}
+        <div className="mt-2.5 flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {[
-            { q: "วิเคราะห์สุขภาพของฉันวันนี้", label: "วิเคราะห์สุขภาพวันนี้" },
-            { q: "วางแผนการออกกำลังกายให้หน่อย", label: "วางแผนออกกำลังกาย" },
-            { q: "วันนี้ควรทานอะไรดี?", label: "ควรทานอะไรดี?" },
-            { q: "ทำไมน้ำหนักไม่ลด?", label: "ทำไมน้ำหนักไม่ลด?" }
+            { q: "วิเคราะห์สุขภาพของฉันวันนี้", label: "วิเคราะห์สุขภาพ" },
+            { q: "วางแผนการออกกำลังกายให้หน่อย", label: "วางแผนออกกำลัง" },
+            { q: "วันนี้ควรทานอะไรดี?", label: "แนะนำอาหาร" },
+            { q: "ทำไมน้ำหนักไม่ลด?", label: "ทำไมน้ำหนักไม่ลด" }
           ].map((item) => (
             <motion.button 
               key={item.q}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.03, y: -1 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => sendMessage(item.q)}
-              className={`whitespace-nowrap border px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                theme === 'dark' 
-                  ? 'bg-zinc-800/50 border-zinc-800 text-zinc-400 hover:bg-zinc-800' 
-                  : 'bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200'
+              className={`whitespace-nowrap px-3 py-1.5 rounded-full text-[10px] font-semibold transition-all ${
+                isDark 
+                  ? 'bg-white/[0.04] border border-white/[0.06] text-zinc-400 hover:bg-white/[0.07] hover:text-zinc-300' 
+                  : 'bg-black/[0.03] border border-black/[0.04] text-zinc-500 hover:bg-black/[0.05]'
               }`}
             >
               {item.label}
