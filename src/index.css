@@ -2,6 +2,9 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* ── Tailwind v4 Dark Mode: class strategy ────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
@@ -19,7 +22,7 @@
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 * {
@@ -30,11 +33,17 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Default: light mode body */
 body {
-  @apply bg-[#0a0a0a] text-white antialiased font-sans;
+  @apply bg-[#f5f5f7] text-zinc-900 antialiased font-sans;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark mode body */
+.dark body {
+  @apply bg-[#0a0a0a] text-white;
 }
 
 /* Selection */
@@ -52,10 +61,16 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 100px;
 }
 ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
 

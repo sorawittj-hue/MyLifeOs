@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Droplets, Trash2, Utensils, Apple, Coffee, Salad, Cookie, X } from 'lucide-react';
-import { db, type FoodLog, type WaterLog } from '../lib/db';
+import { db, type FoodLog, type WaterLog, withSyncMeta } from '../lib/db';
 import { haptics } from '../lib/haptics';
 import { format } from 'date-fns';
 import { useAppStore } from '../lib/store';
@@ -100,7 +100,7 @@ export default function CalorieTracker() {
     if (firebaseUser) {
       await firebaseService.addToCollection('waterLogs', log);
     } else {
-      await db.waterLogs.add(log as WaterLog);
+      await db.waterLogs.add(withSyncMeta(log) as WaterLog);
       loadLogs();
     }
   };

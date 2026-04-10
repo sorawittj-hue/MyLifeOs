@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { db } from './db';
+import { db, withSyncMeta, type StepLog, type Vital, type SleepLog } from './db';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 
 const GOOGLE_FIT_BASE_URL = 'https://www.googleapis.com/fitness/v1/users/me';
@@ -20,14 +20,14 @@ export async function fetchGoogleFitData(tokens: GoogleFitTokens, setTokens: (t:
       if (existingStep) {
         await db.stepLogs.update(existingStep.id!, { count: steps, source: 'demo' });
       } else {
-        await db.stepLogs.add({ date, count: steps, source: 'demo' });
+        await db.stepLogs.add(withSyncMeta({ date, count: steps, source: 'demo' }) as StepLog);
       }
 
       // Mock Vitals
       const hr = Math.floor(Math.random() * 20) + 65;
       const existingHr = await db.vitals.where({ date, type: 'heart_rate' }).first();
       if (!existingHr) {
-        await db.vitals.add({ date, time: '08:00', type: 'heart_rate', value1: hr, unit: 'BPM', source: 'demo' });
+        await db.vitals.add(withSyncMeta({ date, time: '08:00', type: 'heart_rate', value1: hr, unit: 'BPM', source: 'demo' }) as Vital);
       }
     }
     return;
@@ -89,7 +89,7 @@ async function syncSteps(accessToken: string, startTime: number, endTime: number
       if (existing) {
         await db.stepLogs.update(existing.id!, { count, source: 'google_fit' });
       } else {
-        await db.stepLogs.add({ date, count, source: 'google_fit' });
+        await db.stepLogs.add(withSyncMeta({ date, count, source: 'google_fit' }) as StepLog);
       }
     }
   }
@@ -117,14 +117,14 @@ async function syncHeartRate(accessToken: string, startTime: number, endTime: nu
       // Only add if not already present for this exact time
       const existing = await db.vitals.where({ date, time, type: 'heart_rate' }).first();
       if (!existing) {
-        await db.vitals.add({
+        await db.vitals.add(withSyncMeta({
           date,
           time,
           type: 'heart_rate',
           value1: Math.round(avgHr),
           unit: 'BPM',
           source: 'google_fit'
-        });
+        }) as Vital);
       }
     }
   }
@@ -144,13 +144,13 @@ async function syncSleep(accessToken: string, startTime: number, endTime: number
     
     const existing = await db.sleepLogs.where('date').equals(date).first();
     if (!existing) {
-      await db.sleepLogs.add({
+      await db.sleepLogs.add(withSyncMeta({
         date,
         bedtime,
         wakeTime,
         quality: Math.min(Math.round(durationHours * 10), 100), // Mock quality based on duration
         source: 'google_fit'
-      });
+      }) as SleepLog);
     }
   }
 }

@@ -1,12 +1,27 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { db, type User } from './db';
+import { db, type User, type DashboardWidget } from './db';
 import { seedDatabase } from './seed';
 import { auth, googleProvider } from './firebase';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { firebaseService } from './firebaseService';
+import { syncAllCollections, getPendingSyncCount, getIsOnline } from './syncEngine';
+import { registerForPushNotifications } from './notifications';
 
 export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings';
+
+// ── Default Dashboard Widgets ────────────────────────────────
+const DEFAULT_DASHBOARD_WIDGETS: DashboardWidget[] = [
+  { id: 'steps', order: 0, visible: true, size: 'large' },
+  { id: 'calories', order: 1, visible: true, size: 'large' },
+  { id: 'water', order: 2, visible: true, size: 'medium' },
+  { id: 'heartRate', order: 3, visible: true, size: 'small' },
+  { id: 'sleep', order: 4, visible: true, size: 'small' },
+  { id: 'weight', order: 5, visible: true, size: 'large' },
+  { id: 'fasting', order: 6, visible: true, size: 'medium' },
+  { id: 'streaks', order: 7, visible: true, size: 'large' },
+  { id: 'quickActions', order: 8, visible: true, size: 'medium' },
+];
 
 interface AppState {
   user: User | null;
@@ -20,14 +35,22 @@ interface AppState {
     water: boolean;
     food: boolean;
     sleep: boolean;
+    fasting: boolean;
+    push: boolean;
   };
   googleFitTokens: any | null;
   isGoogleFitConnected: boolean;
   demoMode: boolean;
-  insightCache: {
-    text: string;
-    date: string;
-  } | null;
+  // Sync state
+  syncStatus: 'idle' | 'syncing' | 'error';
+  pendingSyncCount: number;
+  isOnline: boolean;
+  // Dashboard layout
+  dashboardWidgets: DashboardWidget[];
+  // FCM token
+  fcmToken: string | null;
+  
+  // Actions
   setUser: (user: User) => void;
   setActiveTab: (tab: TabName) => void;
   setTheme: (theme: 'dark' | 'light') => void;
@@ -35,7 +58,10 @@ interface AppState {
   setNotifications: (notifs: Partial<AppState['notifications']>) => void;
   setGoogleFitTokens: (tokens: any | null) => void;
   setDemoMode: (enabled: boolean) => void;
-  setInsightCache: (insight: { text: string; date: string } | null) => void;
+  setDashboardWidgets: (widgets: DashboardWidget[]) => void;
+  reorderDashboardWidget: (fromIndex: number, toIndex: number) => void;
+  toggleDashboardWidget: (widgetId: string) => void;
+  triggerSync: () => Promise<void>;
   loadUser: () => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
@@ -51,11 +77,15 @@ export const useAppStore = create<AppState>()(
       activeTab: 'dashboard',
       theme: 'dark',
       units: 'metric',
-      notifications: { water: true, food: false, sleep: true },
+      notifications: { water: true, food: false, sleep: true, fasting: true, push: false },
       googleFitTokens: null,
       isGoogleFitConnected: false,
       demoMode: false,
-      insightCache: null,
+      syncStatus: 'idle',
+      pendingSyncCount: 0,
+      isOnline: navigator.onLine,
+      dashboardWidgets: DEFAULT_DASHBOARD_WIDGETS,
+      fcmToken: null,
 
       setUser: async (user) => {
         const firebaseUser = get().firebaseUser;
@@ -86,7 +116,40 @@ export const useAppStore = create<AppState>()(
       
       setDemoMode: (enabled) => set({ demoMode: enabled }),
 
-      setInsightCache: (insight) => set({ insightCache: insight }),
+      // ── Dashboard Widget Operations ────────────────────────
+      setDashboardWidgets: (widgets) => set({ dashboardWidgets: widgets }),
+
+      reorderDashboardWidget: (fromIndex, toIndex) => {
+        const widgets = [...get().dashboardWidgets];
+        const [moved] = widgets.splice(fromIndex, 1);
+        widgets.splice(toIndex, 0, moved);
+        // Re-assign order values
+        const reordered = widgets.map((w, i) => ({ ...w, order: i }));
+        set({ dashboardWidgets: reordered });
+      },
+
+      toggleDashboardWidget: (widgetId) => {
+        const widgets = get().dashboardWidgets.map(w => 
+          w.id === widgetId ? { ...w, visible: !w.visible } : w
+        );
+        set({ dashboardWidgets: widgets });
+      },
+
+      // ── Sync Operations ────────────────────────────────────
+      triggerSync: async () => {
+        const { firebaseUser } = get();
+        if (!firebaseUser) return;
+
+        set({ syncStatus: 'syncing' });
+        try {
+          await syncAllCollections(firebaseUser.uid);
+          const pending = await getPendingSyncCount();
+          set({ syncStatus: 'idle', pendingSyncCount: pending });
+        } catch (error) {
+          console.error('Sync failed:', error);
+          set({ syncStatus: 'error' });
+        }
+      },
 
       login: async () => {
         try {
@@ -107,12 +170,17 @@ export const useAppStore = create<AppState>()(
       },
 
       loadUser: async () => {
+        // Monitor online status
+        const updateOnlineStatus = () => set({ isOnline: navigator.onLine });
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+
         // Listen for auth changes
         onAuthStateChanged(auth, async (fbUser) => {
           if (fbUser) {
             set({ firebaseUser: fbUser, isAuthReady: true });
             
-            // Sync local data to Firebase if logging in for the first time
+            // Sync local data to Firebase
             const syncData = async () => {
               const collections = [
                 'foodLogs', 'waterLogs', 'stepLogs', 'sleepLogs', 
@@ -125,7 +193,6 @@ export const useAppStore = create<AppState>()(
                   const table = db[col];
                   const localData = await table.toArray();
                   if (localData.length > 0) {
-                    // Get existing data from Firebase to avoid duplicates
                     const remoteData = await firebaseService.getCollection<any>(col, fbUser.uid);
                     const remoteTimestamps = new Set(remoteData.map(d => d.timestamp || d.date || d.startTime));
 
@@ -135,13 +202,11 @@ export const useAppStore = create<AppState>()(
                     });
 
                     if (itemsToSync.length > 0) {
-                      // Use batch write for efficiency (max 500 items per batch)
                       for (let i = 0; i < itemsToSync.length; i += 500) {
                         const chunk = itemsToSync.slice(i, i + 500);
                         await firebaseService.batchAdd(col, chunk, fbUser.uid);
                       }
                     }
-                    // Clear local data ONLY after all items in this collection are synced successfully
                     await table.clear();
                   }
                 } catch (error) {
@@ -152,12 +217,18 @@ export const useAppStore = create<AppState>()(
 
             await syncData();
 
+            // Register for push notifications
+            const { notifications } = get();
+            if (notifications.push) {
+              const token = await registerForPushNotifications();
+              if (token) set({ fcmToken: token });
+            }
+
             // Load profile from Firebase
             const profile = await firebaseService.getUserProfile(fbUser.uid);
             if (profile) {
               set({ user: profile as User, isLoaded: true });
             } else {
-              // Create default profile if none exists
               const defaultUser: User = {
                 name: fbUser.displayName || 'ผู้ใช้งาน',
                 age: 31,
@@ -202,7 +273,8 @@ export const useAppStore = create<AppState>()(
         notifications: state.notifications,
         isGoogleFitConnected: state.isGoogleFitConnected,
         demoMode: state.demoMode,
-        insightCache: state.insightCache,
+        dashboardWidgets: state.dashboardWidgets,
+        fcmToken: state.fcmToken,
       }),
     }
   )

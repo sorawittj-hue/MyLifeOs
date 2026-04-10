@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Bot, User, Sparkles, Loader2, Zap } from 'lucide-react';
-import { db, type ChatMessage } from '../lib/db';
+import { db, type ChatMessage, withSyncMeta } from '../lib/db';
 import { getAICoachResponse, type AICoachContext } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'motion/react';
@@ -22,11 +22,11 @@ export default function AICoach() {
       unsubscribe = firebaseService.subscribeToCollection('chatMessages', firebaseUser.uid, (data) => {
         const msgs = (data as ChatMessage[]).sort((a, b) => a.timestamp - b.timestamp);
         if (msgs.length === 0) {
-          const welcome: ChatMessage = {
+          const welcome: ChatMessage = withSyncMeta({
             role: 'model',
             content: "สวัสดี! ผมคือ AI Health Coach ของคุณ มีอะไรให้ผมช่วยดูแลสุขภาพของคุณในวันนี้ไหมครับ? ผมสามารถวิเคราะห์ข้อมูลของคุณ วางแผนการออกกำลังกาย หรือให้คำแนะนำด้านโภชนาการได้ครับ",
             timestamp: Date.now()
-          };
+          }) as ChatMessage;
           firebaseService.addToCollection('chatMessages', welcome);
         } else {
           setMessages(msgs);
@@ -48,11 +48,11 @@ export default function AICoach() {
   const loadMessages = async () => {
     const msgs = await db.chatMessages.orderBy('timestamp').toArray();
     if (msgs.length === 0) {
-      const welcome: ChatMessage = {
+      const welcome: ChatMessage = withSyncMeta({
         role: 'model',
         content: "สวัสดี! ผมคือ AI Health Coach ของคุณ มีอะไรให้ผมช่วยดูแลสุขภาพของคุณในวันนี้ไหมครับ? ผมสามารถวิเคราะห์ข้อมูลของคุณ วางแผนการออกกำลังกาย หรือให้คำแนะนำด้านโภชนาการได้ครับ",
         timestamp: Date.now()
-      };
+      }) as ChatMessage;
       await db.chatMessages.add(welcome);
       setMessages([welcome]);
     } else {
@@ -64,11 +64,11 @@ export default function AICoach() {
     const messageText = typeof overrideInput === 'string' ? overrideInput : input;
     if (!messageText.trim() || isLoading) return;
 
-    const userMsg: ChatMessage = {
+    const userMsg: ChatMessage = withSyncMeta({
       role: 'user',
       content: messageText,
       timestamp: Date.now()
-    };
+    }) as ChatMessage;
 
     if (!firebaseUser) {
       setMessages(prev => [...prev, userMsg]);
@@ -107,11 +107,11 @@ export default function AICoach() {
 
       const response = await getAICoachResponse(messageText, context);
       
-      const aiMsg: ChatMessage = {
+      const aiMsg: ChatMessage = withSyncMeta({
         role: 'model',
         content: response,
         timestamp: Date.now()
-      };
+      }) as ChatMessage;
 
       if (firebaseUser) {
         await firebaseService.addToCollection('chatMessages', aiMsg);

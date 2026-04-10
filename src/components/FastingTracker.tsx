@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Play, Square, Timer, Flame, History, ChevronRight, Info, Coffee, Droplets, Moon, Sun, Clock, UtensilsCrossed, Store, ChefHat, Egg, Leaf, Zap, ShoppingBag, Heart } from 'lucide-react';
+import { Play, Square, Timer, Flame, History, ChevronRight, Info, Coffee, Droplets, Moon, Sun, Clock, UtensilsCrossed, Store, ChefHat, Egg, Leaf, Zap, ShoppingBag, Heart, X } from 'lucide-react';
 import { db, type FastingSession } from '../lib/db';
 import { haptics } from '../lib/haptics';
 import { format, differenceInSeconds, addHours, setHours, setMinutes, isAfter, isBefore } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppStore } from '../lib/store';
 import { firebaseService } from '../lib/firebaseService';
+import { FastingStateTimeline } from './FastingStates';
 
 interface ProtocolWindow {
   id: string;
@@ -306,6 +307,8 @@ export default function FastingTracker() {
   const [showInfo, setShowInfo] = useState(true);
   const [showMealGuide, setShowMealGuide] = useState(false);
   const [selectedMealCategory, setSelectedMealCategory] = useState('seven');
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [fullHistory, setFullHistory] = useState<FastingSession[]>([]);
 
 
   const currentProtocol = PROTOCOLS.find(p => p.id === selectedProtocolId) || PROTOCOLS[1];
@@ -324,7 +327,7 @@ export default function FastingTracker() {
     if (firebaseUser) {
       unsubscribe = firebaseService.subscribeToCollection<FastingSession>('fastingSessions', firebaseUser.uid, (data) => {
         const active = data.find(s => s.completed === 0);
-        const completed = data.filter(s => s.completed === 1).sort((a, b) => (b.endTime || 0) - (a.endTime || 0)).slice(0, 10);
+        const completed = data.filter(s => s.completed === 1).sort((a, b) => (b.endTime || 0) - (a.endTime || 0));
         
         if (active) {
           setActiveSession(active);
@@ -334,7 +337,8 @@ export default function FastingTracker() {
           setActiveSession(null);
           setElapsed(0);
         }
-        setHistory(completed);
+        setFullHistory(completed);
+        setHistory(completed.slice(0, 10));
       });
     } else {
       loadActiveSession();
@@ -364,8 +368,9 @@ export default function FastingTracker() {
   };
 
   const loadHistory = async () => {
-    const sessions = await db.fastingSessions.where('completed').equals(1).reverse().limit(10).toArray();
-    setHistory(sessions);
+    const sessions = await db.fastingSessions.where('completed').equals(1).reverse().toArray();
+    setFullHistory(sessions);
+    setHistory(sessions.slice(0, 10));
   };
 
   const startFast = async () => {
@@ -374,6 +379,8 @@ export default function FastingTracker() {
       startTime: Date.now(),
       protocol: selectedProtocolId,
       completed: 0,
+      updatedAt: Date.now(),
+      syncStatus: 'pending',
     };
 
     if (firebaseUser) {
@@ -401,6 +408,18 @@ export default function FastingTracker() {
         setElapsed(0);
         loadHistory();
       }
+
+      // Update fasting streak via gamification engine
+      try {
+        const { updateStreak } = await import('../lib/gamification');
+        const { streak, newBadges } = await updateStreak('fasting');
+        if (newBadges.length > 0) {
+          // Could show a toast/notification for new badges
+          console.log('🎉 New badges earned:', newBadges.map(b => b.name));
+        }
+      } catch (e) {
+        console.error('Gamification update failed:', e);
+      }
     }
   };
 
@@ -412,7 +431,15 @@ export default function FastingTracker() {
   };
 
   const targetSeconds = currentProtocol.fastHours * 3600;
-  const progress = Math.min((elapsed / targetSeconds) * 100, 100);
+  const safeElapsed = Math.max(0, elapsed);
+  const progress = Math.min((safeElapsed / targetSeconds) * 100, 100);
+  const isOvertime = safeElapsed >= targetSeconds;
+
+  const radius = 140;
+  const stroke = 12;
+  const normalizedRadius = radius - stroke * 2;
+  const circumference = normalizedRadius * 2 * Math.PI;
+  const strokeDashoffset = circumference - ((isOvertime ? 100 : progress) / 100) * circumference;
 
   const cardBg = isDark ? 'glass-card' : 'glass-card-light';
   const textMuted = isDark ? 'text-zinc-500' : 'text-zinc-400';
@@ -558,37 +585,93 @@ export default function FastingTracker() {
         animate={{ opacity: 1, scale: 1 }}
         className={`relative flex flex-col items-center justify-center py-12 bento-card overflow-hidden ${cardBg}`}
       >
-        <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-           <motion.div 
-            animate={{ rotate: 360 }}
-            transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-            className="w-[500px] h-[500px] rounded-full border-[20px] border-green-500 border-dashed" 
-           />
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+          <div className={`w-[600px] h-[600px] rounded-full blur-[100px] animate-pulse ${isOvertime ? 'bg-yellow-500/20' : 'bg-gradient-to-tr from-green-500/20 to-teal-500/20'}`} style={{ animationDuration: '4s' }} />
         </div>
 
-        <div className="z-10 text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-[10px] font-bold uppercase tracking-widest">
-            <Timer size={12} />
-            {activeSession ? 'Fasting in Progress' : 'Ready to Start'}
-          </div>
-          
-          <div className="space-y-1">
-            <h2 className={`text-7xl font-mono font-bold tracking-tighter ${textMain}`}>
-              {formatTime(elapsed)}
-            </h2>
-            <p className={`${textMuted} text-xs font-medium`}>
-              เป้าหมาย: {currentProtocol.fastHours} ชั่วโมง ({formatTime(targetSeconds)})
-            </p>
+        <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-[320px] aspect-square mb-2">
+          <svg
+            className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none drop-shadow-xl"
+            viewBox="0 0 320 320"
+          >
+            {/* Background Ring */}
+            <circle
+              cx="160"
+              cy="160"
+              r={radius}
+              fill="none"
+              stroke={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}
+              strokeWidth={stroke}
+            />
+            {/* Progress Ring */}
+            <circle
+              cx="160"
+              cy="160"
+              r={radius}
+              fill="none"
+              stroke={isOvertime ? "url(#gradient-overtime)" : "url(#gradient)"}
+              strokeWidth={stroke}
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              style={{ transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)' }}
+            />
+            {/* Overtime Ring Glow effect */}
+            {isOvertime && (
+              <circle
+                cx="160"
+                cy="160"
+                r={radius}
+                fill="none"
+                stroke="url(#gradient-overtime)"
+                strokeWidth={stroke}
+                strokeDasharray={circumference}
+                strokeDashoffset={0}
+                strokeLinecap="round"
+                className="opacity-40 blur-md animate-pulse"
+              />
+            )}
+            <defs>
+              <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#22c55e" /> {/* green-500 */}
+                <stop offset="100%" stopColor="#14b8a6" /> {/* teal-500 */}
+              </linearGradient>
+              <linearGradient id="gradient-overtime" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#eab308" /> {/* yellow-500 */}
+                <stop offset="100%" stopColor="#f59e0b" /> {/* amber-500 */}
+              </linearGradient>
+            </defs>
+          </svg>
+
+          <div className="z-10 text-center space-y-3 px-4">
+            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
+                isOvertime ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400' : 'bg-green-500/10 text-green-500'
+              } text-[10px] font-bold uppercase tracking-widest`}
+            >
+              <Timer size={12} />
+              {activeSession ? (isOvertime ? 'Goal Achieved' : 'Fasting in Progress') : 'Ready to Start'}
+            </div>
+            
+            <div className="space-y-1">
+              <h2 className={`text-5xl sm:text-6xl font-mono font-bold tracking-tighter tabular-nums ${
+                isOvertime ? 'text-yellow-600 dark:text-yellow-500 drop-shadow-[0_0_15px_rgba(234,179,8,0.3)]' : textMain
+              }`}>
+                {formatTime(safeElapsed)}
+              </h2>
+              <p className={`${textMuted} text-xs font-medium`}>
+                เป้าหมาย: {currentProtocol.fastHours} ชั่วโมง ({formatTime(targetSeconds)})
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-10 z-10 flex flex-col items-center gap-4">
+        <div className="z-10 flex flex-col items-center gap-4">
           {!activeSession ? (
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={startFast}
-              className="flex items-center gap-3 bg-green-500 hover:bg-green-600 text-black font-bold px-10 py-5 rounded-[24px] transition-all shadow-xl shadow-green-500/20"
+              className="flex items-center gap-3 bg-gradient-to-r from-green-500 to-emerald-500 text-black font-bold px-10 py-5 rounded-full transition-all shadow-xl shadow-green-500/20 ring-4 ring-green-500/20"
             >
               <Play size={24} fill="currentColor" />
               เริ่มอดอาหาร
@@ -598,61 +681,73 @@ export default function FastingTracker() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={stopFast}
-              className="flex items-center gap-3 bg-red-500 hover:bg-red-600 text-white font-bold px-10 py-5 rounded-[24px] transition-all shadow-xl shadow-red-500/20"
+              className={`flex items-center gap-3 ${
+                isOvertime 
+                  ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-black shadow-yellow-500/20 ring-yellow-500/20' 
+                  : 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-red-500/20 ring-red-500/20'
+              } font-bold px-10 py-5 rounded-full transition-all shadow-xl ring-4`}
             >
               <Square size={20} fill="currentColor" />
-              หยุดอดอาหาร
+              หยุดการทำ IF
             </motion.button>
           )}
           
           {activeSession && (
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-              สิ้นสุดประมาณ: {format(addHours(new Date(activeSession.startTime), currentProtocol.fastHours), 'HH:mm')} น.
-            </p>
+            <div className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${
+              isDark ? 'bg-white/[0.04] text-zinc-400' : 'bg-black/[0.03] text-zinc-500'
+            }`}>
+              <Clock size={12} />
+              สิ้นสุดประมาณ {format(addHours(new Date(activeSession.startTime), currentProtocol.fastHours), 'HH:mm')} น.
+            </div>
           )}
         </div>
-
-        {activeSession && (
-          <div className="mt-10 w-full px-10 space-y-3">
-            <div className={`flex justify-between text-[10px] font-bold uppercase tracking-widest ${textMuted}`}>
-              <span>ความคืบหน้า</span>
-              <span className="text-green-500">{Math.round(progress)}%</span>
-            </div>
-            <div className={`h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.06]'}`}>
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: `${progress}%` }}
-                className="h-full bg-gradient-to-r from-green-500 to-emerald-500" 
-              />
-            </div>
-          </div>
-        )}
       </motion.div>
+
+      {/* ── Dynamic Fasting States (Science-backed body state visualization) ── */}
+      {activeSession && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+        >
+          <FastingStateTimeline
+            elapsedHours={elapsed / 3600}
+            totalHours={currentProtocol.fastHours}
+            isDark={isDark}
+          />
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className={`${cardBg} p-4 bento-card space-y-2`}
+          className={`${cardBg} p-4 bento-card space-y-2 relative overflow-hidden`}
         >
-          <div className="flex items-center gap-2 text-orange-500">
+          <div className="absolute -right-4 -top-4 opacity-5 text-orange-500 pointer-events-none">
+            <Flame size={80} />
+          </div>
+          <div className="flex items-center gap-2 text-orange-500 relative z-10">
             <Flame size={18} />
             <span className="text-[10px] font-bold uppercase tracking-widest">Fat Burning</span>
           </div>
-          <p className="text-2xl font-bold">~{((elapsed / 3600) * 0.12).toFixed(2)} <span className="text-xs font-normal text-zinc-500">g</span></p>
-          <p className={`text-[10px] font-medium ${textMuted}`}>ประมาณการไขมันที่ถูกใช้</p>
+          <p className="text-3xl font-bold relative z-10">~{((safeElapsed / 3600) * 0.12).toFixed(2)} <span className="text-xs font-normal text-zinc-500">g</span></p>
+          <p className={`text-[10px] font-medium ${textMuted} relative z-10`}>ประมาณการไขมันที่ถูกใช้</p>
         </motion.div>
         <motion.div 
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className={`${cardBg} p-5 rounded-3xl border space-y-2 shadow-sm`}
+          className={`${cardBg} p-4 bento-card space-y-2 relative overflow-hidden`}
         >
-          <div className="flex items-center gap-2 text-blue-500">
+          <div className="absolute -right-4 -top-4 opacity-5 text-blue-500 pointer-events-none">
+            <History size={80} />
+          </div>
+          <div className="flex items-center gap-2 text-blue-500 relative z-10">
             <History size={18} />
             <span className="text-[10px] font-bold uppercase tracking-widest">Streak</span>
           </div>
-          <p className="text-2xl font-bold">{history.length + (activeSession ? 1 : 0)} <span className="text-xs font-normal text-zinc-500">Days</span></p>
-          <p className={`text-[10px] font-medium ${textMuted}`}>ทำ IF อย่างต่อเนื่อง</p>
+          <p className="text-3xl font-bold relative z-10">{history.length + (activeSession ? 1 : 0)} <span className="text-xs font-normal text-zinc-500">Days</span></p>
+          <p className={`text-[10px] font-medium ${textMuted} relative z-10`}>ทำ IF อย่างต่อเนื่อง</p>
         </motion.div>
       </div>
 
@@ -841,7 +936,13 @@ export default function FastingTracker() {
       <section className="space-y-4">
         <div className="flex justify-between items-center px-1">
           <h3 className="font-bold text-lg">ประวัติการทำ IF</h3>
-          <button className="text-green-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+          <button 
+            onClick={() => {
+              haptics.light();
+              setShowAllHistory(true);
+            }}
+            className="text-green-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1 hover:opacity-80 transition-opacity"
+          >
             ดูทั้งหมด <ChevronRight size={14} />
           </button>
         </div>
@@ -883,6 +984,91 @@ export default function FastingTracker() {
           )}
         </div>
       </section>
+
+      {/* History Modal */}
+      <AnimatePresence>
+        {showAllHistory && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex flex-col bg-black/60 backdrop-blur-xl"
+          >
+            <div className={`flex-1 overflow-y-auto ${isDark ? 'bg-zinc-950' : 'bg-white'}`}>
+              <div className={`sticky top-0 z-10 px-5 py-4 border-b ${isDark ? 'bg-zinc-950/80 border-zinc-800' : 'bg-white/80 border-zinc-200'} backdrop-blur-xl flex justify-between items-center`}>
+                <h2 className="text-xl font-bold">ประวัติทั้งหมด</h2>
+                <button 
+                  onClick={() => {
+                    haptics.light();
+                    setShowAllHistory(false);
+                  }}
+                  className={`p-2 rounded-full ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-100 text-zinc-600'}`}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center text-green-500">
+                    <History size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold">สรุปสถิติ</h3>
+                    <p className={`text-xs ${textMuted}`}>อ้างอิงจากข้อมูลที่บันทึกไว้</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className={`${cardBg} p-4 rounded-3xl border ${isDark ? 'border-white/[0.06]' : 'border-black/[0.06]'}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted} mb-1`}>Fasts Completed</p>
+                    <p className="text-2xl font-bold">{fullHistory.length}</p>
+                  </div>
+                  <div className={`${cardBg} p-4 rounded-3xl border ${isDark ? 'border-white/[0.06]' : 'border-black/[0.06]'}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted} mb-1`}>Total Fasting Hours</p>
+                    <p className="text-2xl font-bold">{Math.floor(fullHistory.reduce((acc, s) => acc + (s.endTime ? differenceInSeconds(new Date(s.endTime), new Date(s.startTime)) : 0), 0) / 3600)}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {fullHistory.map((s, idx) => (
+                    <motion.div 
+                      key={s.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(idx * 0.05, 0.5) }}
+                      className={`${cardBg} p-4 rounded-3xl border ${isDark ? 'border-white/[0.06]' : 'border-black/[0.06]'} flex justify-between items-center`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-green-500/10' : 'bg-green-50'} text-green-500`}>
+                          <Clock size={20} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm">สูตร {s.protocol}</p>
+                          <p className={`text-[10px] font-medium ${textMuted}`}>{format(new Date(s.startTime), 'd MMM yyyy • HH:mm')}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono font-bold text-green-500">
+                          {s.endTime ? formatTime(differenceInSeconds(new Date(s.endTime), new Date(s.startTime))) : '00:00:00'}
+                        </p>
+                        <div className="flex items-center justify-end gap-1 mt-0.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                          <p className={`text-[9px] font-bold ${textMuted} uppercase tracking-tighter`}>Completed</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                  {fullHistory.length === 0 && (
+                    <div className="text-center py-10 opacity-50">
+                      <p className="text-sm">ไม่มีประวัติ</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

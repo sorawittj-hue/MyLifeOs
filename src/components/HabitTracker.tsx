@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CheckCircle2, Circle, Plus, Flame, Trophy, Calendar, Trash2 } from 'lucide-react';
-import { db, type Habit, type HabitCompletion } from '../lib/db';
+import { db, type Habit, type HabitCompletion, withSyncMeta } from '../lib/db';
 import { format, subDays, eachDayOfInterval, startOfYear } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppStore } from '../lib/store';
@@ -56,7 +56,7 @@ export default function HabitTracker() {
       if (existing?.id) {
         await db.habitCompletions.delete(existing.id as number);
       } else {
-        await db.habitCompletions.add({ habitId: habitId as number, date: today });
+        await db.habitCompletions.add(withSyncMeta({ habitId: habitId as number, date: today }) as HabitCompletion);
       }
       loadHabits();
     }
