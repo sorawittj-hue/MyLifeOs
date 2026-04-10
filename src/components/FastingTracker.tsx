@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Square, Timer, Flame, History, ChevronRight, Info, Coffee, Droplets, Moon, Sun, Clock } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Play, Square, Timer, Flame, History, ChevronRight, Info, Coffee, Droplets, Moon, Sun, Clock, UtensilsCrossed, Store, ChefHat, Egg, Leaf, Zap, ShoppingBag, Heart } from 'lucide-react';
 import { db, type FastingSession } from '../lib/db';
 import { haptics } from '../lib/haptics';
 import { format, differenceInSeconds, addHours, setHours, setMinutes, isAfter, isBefore } from 'date-fns';
@@ -88,6 +88,213 @@ const PROTOCOLS: ProtocolInfo[] = [
   }
 ];
 
+// ── Meal Recommendation Data ──────────────────────────
+interface MealItem {
+  name: string;
+  calories: number;
+  protein: number;
+  prepTime: string;
+  tip: string;
+  tags: string[];
+}
+
+interface MealCategory {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  color: string;
+  bgColor: string;
+  description: string;
+  meals: MealItem[];
+}
+
+const MEAL_CATEGORIES: MealCategory[] = [
+  {
+    id: 'seven',
+    label: '7-Eleven',
+    icon: <Store size={16} />,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/10',
+    description: 'สะดวก หาง่าย ได้ทุกสาขา',
+    meals: [
+      {
+        name: 'อกไก่อบพริกไทยดำ + ข้าวกล้อง',
+        calories: 320,
+        protein: 28,
+        prepTime: '3 นาที (อุ่นไมโครเวฟ)',
+        tip: 'เลือกข้าวกล้องแทนข้าวขาว ได้ไฟเบอร์เพิ่ม',
+        tags: ['High Protein', 'Low Fat'],
+      },
+      {
+        name: 'สลัดอกไก่ + ไข่ต้ม',
+        calories: 250,
+        protein: 32,
+        prepTime: 'พร้อมทาน',
+        tip: 'ใช้น้ำสลัดญี่ปุ่นแทนมายองเนส ลดแคลลง 100+',
+        tags: ['Low Carb', 'High Protein'],
+      },
+      {
+        name: 'แซนด์วิชทูน่าโฮลวีท',
+        calories: 280,
+        protein: 18,
+        prepTime: 'พร้อมทาน',
+        tip: 'เลือกแบบโฮลวีทจะอิ่มนานกว่า',
+        tags: ['Balanced', 'Fiber'],
+      },
+      {
+        name: 'โยเกิร์ตกรีก + กราโนล่า',
+        calories: 180,
+        protein: 14,
+        prepTime: 'พร้อมทาน',
+        tip: 'เลือกแบบไม่หวาน หรือ 0% Fat',
+        tags: ['Snack', 'Probiotics'],
+      },
+      {
+        name: 'ข้าวต้มไก่ + ไข่ลวก',
+        calories: 200,
+        protein: 15,
+        prepTime: '3 นาที (อุ่น)',
+        tip: 'เหมาะเป็นมื้อแรกหลัง Break Fast เพราะเบาท้อง',
+        tags: ['Easy Digest', 'Light'],
+      },
+    ],
+  },
+  {
+    id: 'homemade',
+    label: 'ทำเองง่าย',
+    icon: <ChefHat size={16} />,
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/10',
+    description: 'ทำเองที่บ้าน ไม่เกิน 15 นาที',
+    meals: [
+      {
+        name: 'ข้าวผัดไข่ + ผักรวม',
+        calories: 350,
+        protein: 14,
+        prepTime: '10 นาที',
+        tip: 'ใช้น้ำมันมะกอก ใส่ผักเยอะๆ ลดข้าวลงนิด',
+        tags: ['Quick', 'Balanced'],
+      },
+      {
+        name: 'ไข่เจียวหมูสับ + ข้าวสวย',
+        calories: 400,
+        protein: 22,
+        prepTime: '8 นาที',
+        tip: 'ใส่ผักบุ้งหรือถั่วฝักยาวเพิ่มไฟเบอร์',
+        tags: ['High Protein', 'Thai Classic'],
+      },
+      {
+        name: 'ต้มจืดเต้าหู้หมูสับ',
+        calories: 180,
+        protein: 18,
+        prepTime: '12 นาที',
+        tip: 'เครื่องเทศน้อย ย่อยง่าย ดีมากหลัง Break Fast',
+        tags: ['Low Cal', 'Easy Digest'],
+      },
+      {
+        name: 'กะเพราไก่สับ (ไม่ทอด)',
+        calories: 380,
+        protein: 26,
+        prepTime: '10 นาที',
+        tip: 'ข้ามไข่ดาวถ้าอยากลดแคล ใส่ถั่วฝักยาวเพิ่ม',
+        tags: ['Thai Classic', 'High Protein'],
+      },
+      {
+        name: 'โจ๊กหมู + ไข่ลวก + ขิง',
+        calories: 220,
+        protein: 16,
+        prepTime: '15 นาที',
+        tip: 'ใส่ขิงเยอะ ช่วยระบบย่อยอาหารหลังอดนาน',
+        tags: ['Easy Digest', 'Warm'],
+      },
+    ],
+  },
+  {
+    id: 'protein',
+    label: 'โปรตีนสูง',
+    icon: <Egg size={16} />,
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10',
+    description: 'เน้นโปรตีน สร้างกล้ามเนื้อ',
+    meals: [
+      {
+        name: 'อกไก่ย่าง + ข้าวกล้อง + บร็อคโคลี่',
+        calories: 380,
+        protein: 42,
+        prepTime: '15 นาที',
+        tip: 'หมักไก่ล่วงหน้า 1 คืน รสชาติจะดีมาก',
+        tags: ['Meal Prep', 'Gym'],
+      },
+      {
+        name: 'ไข่ต้ม 3 ฟอง + อะโวคาโด',
+        calories: 350,
+        protein: 24,
+        prepTime: '10 นาที',
+        tip: 'ไข่ต้มกึ่งสุก (6 นาที) ให้โปรตีนดูดซึมดีกว่า',
+        tags: ['Keto Friendly', 'Simple'],
+      },
+      {
+        name: 'ปลานึ่งมะนาว + ข้าวไรซ์เบอร์รี่',
+        calories: 300,
+        protein: 35,
+        prepTime: '15 นาที',
+        tip: 'ปลากะพง หรือปลาทับทิมนึ่ง ไขมันต่ำ โปรตีนเยอะ',
+        tags: ['Low Fat', 'Omega-3'],
+      },
+      {
+        name: 'สเต็กหมูพริกไทยดำ + ผักสลัด',
+        calories: 420,
+        protein: 38,
+        prepTime: '12 นาที',
+        tip: 'เลือกหมูสันนอก ไขมันน้อย โปรตีนสูง',
+        tags: ['High Protein', 'Filling'],
+      },
+    ],
+  },
+  {
+    id: 'light',
+    label: 'เบาๆ ว่าง',
+    icon: <Leaf size={16} />,
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/10',
+    description: 'ของว่าง ทานเล่น ไม่อ้วน',
+    meals: [
+      {
+        name: 'กล้วยหอม + เนยถั่ว 1 ช้อน',
+        calories: 160,
+        protein: 5,
+        prepTime: 'พร้อมทาน',
+        tip: 'ให้พลังงานเร็ว เหมาะหลัง Break Fast ทันที',
+        tags: ['Quick Energy', 'Natural'],
+      },
+      {
+        name: 'ถั่วอัลมอนด์ 1 กำมือ',
+        calories: 140,
+        protein: 6,
+        prepTime: 'พร้อมทาน',
+        tip: 'อิ่มนาน ไขมันดี กินเป็นของว่างบ่ายได้',
+        tags: ['Healthy Fat', 'Portable'],
+      },
+      {
+        name: 'แอปเปิ้ล + ชีสก้อน',
+        calories: 150,
+        protein: 8,
+        prepTime: 'พร้อมทาน',
+        tip: 'ชีสให้โปรตีน + แคลเซียม แอปเปิ้ลให้ไฟเบอร์',
+        tags: ['Balanced Snack', 'Easy'],
+      },
+      {
+        name: 'เต้าหู้ไข่เย็น + ซอสโชยุ',
+        calories: 80,
+        protein: 7,
+        prepTime: 'พร้อมทาน',
+        tip: 'หาได้ทั้ง 7-11 และซูเปอร์ แคลอรี่ต่ำมาก',
+        tags: ['Ultra Low Cal', 'Easy'],
+      },
+    ],
+  },
+];
+
 export default function FastingTracker() {
   const { theme, firebaseUser } = useAppStore();
   const isDark = theme === 'dark';
@@ -97,6 +304,9 @@ export default function FastingTracker() {
   const [selectedWindowId, setSelectedWindowId] = useState('16-std');
   const [history, setHistory] = useState<FastingSession[]>([]);
   const [showInfo, setShowInfo] = useState(true);
+  const [showMealGuide, setShowMealGuide] = useState(false);
+  const [selectedMealCategory, setSelectedMealCategory] = useState('seven');
+
 
   const currentProtocol = PROTOCOLS.find(p => p.id === selectedProtocolId) || PROTOCOLS[1];
   const currentWindow = currentProtocol.windows.find(w => w.id === selectedWindowId) || currentProtocol.windows[0];
@@ -445,6 +655,188 @@ export default function FastingTracker() {
           <p className={`text-[10px] font-medium ${textMuted}`}>ทำ IF อย่างต่อเนื่อง</p>
         </motion.div>
       </div>
+
+      {/* ── IF Meal Recommendation Section ── */}
+      <section className="space-y-4">
+        <div className="flex justify-between items-center px-1">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+              <UtensilsCrossed size={16} className="text-white" />
+            </div>
+            <div>
+              <h3 className="font-bold text-lg">เมนูแนะนำ IF</h3>
+              <p className={`text-[10px] ${textMuted}`}>เมนูง่ายๆ ประหยัดเวลา</p>
+            </div>
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              haptics.light();
+              setShowMealGuide(!showMealGuide);
+            }}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+              showMealGuide
+                ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20'
+                : isDark ? 'bg-white/[0.06] text-zinc-400 hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-500 hover:bg-black/[0.08]'
+            }`}
+          >
+            {showMealGuide ? 'ซ่อน' : 'ดูเมนู'}
+          </motion.button>
+        </div>
+
+        <AnimatePresence>
+          {showMealGuide && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+              className="overflow-hidden space-y-4"
+            >
+              {/* Tips Banner */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className={`${cardBg} bento-card p-4`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center flex-shrink-0">
+                    <Zap size={18} className="text-amber-400" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-amber-400">💡 เคล็ดลับ Break Fast</p>
+                    <p className={`text-[11px] leading-relaxed ${textMuted}`}>
+                      มื้อแรกหลังอดอาหาร ควรเป็นของเบาท้อง เช่น โจ๊ก ข้าวต้ม หรือสลัด
+                      หลีกเลี่ยงของมัน ของทอด ในมื้อแรก เพราะกระเพาะยังไม่พร้อม
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Category Tabs */}
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                {MEAL_CATEGORIES.map((cat) => (
+                  <motion.button
+                    key={cat.id}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      haptics.light();
+                      setSelectedMealCategory(cat.id);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all border ${
+                      selectedMealCategory === cat.id
+                        ? `${cat.bgColor} ${cat.color} border-current/20 shadow-lg`
+                        : isDark
+                          ? 'bg-white/[0.04] border-white/[0.06] text-zinc-500 hover:bg-white/[0.08]'
+                          : 'bg-black/[0.03] border-black/[0.06] text-zinc-400 hover:bg-black/[0.06]'
+                    }`}
+                  >
+                    {cat.icon}
+                    {cat.label}
+                  </motion.button>
+                ))}
+              </div>
+
+              {/* Category Description */}
+              {MEAL_CATEGORIES.filter(c => c.id === selectedMealCategory).map(cat => (
+                <motion.p
+                  key={cat.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className={`text-xs px-1 ${textMuted} flex items-center gap-2`}
+                >
+                  <ShoppingBag size={12} />
+                  {cat.description}
+                </motion.p>
+              ))}
+
+              {/* Meal Cards */}
+              <div className="space-y-3">
+                {MEAL_CATEGORIES.find(c => c.id === selectedMealCategory)?.meals.map((meal, idx) => (
+                  <motion.div
+                    key={meal.name}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.07, duration: 0.35 }}
+                    className={`${cardBg} bento-card p-4 space-y-3`}
+                  >
+                    {/* Meal Header */}
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        <p className="font-bold text-sm leading-snug">{meal.name}</p>
+                        <div className="flex items-center gap-3 mt-1.5">
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-orange-400">
+                            <Flame size={10} />
+                            {meal.calories} kcal
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-blue-400">
+                            <Egg size={10} />
+                            {meal.protein}g โปรตีน
+                          </span>
+                          <span className={`text-[10px] font-medium ${textMuted}`}>
+                            ⏱ {meal.prepTime}
+                          </span>
+                        </div>
+                      </div>
+                      <div className={`px-2.5 py-1 rounded-xl text-[10px] font-bold ${
+                        meal.calories <= 200 ? 'bg-green-500/10 text-green-400' :
+                        meal.calories <= 350 ? 'bg-amber-500/10 text-amber-400' :
+                        'bg-red-500/10 text-red-400'
+                      }`}>
+                        {meal.calories <= 200 ? 'Low' : meal.calories <= 350 ? 'Med' : 'High'}
+                      </div>
+                    </div>
+
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {meal.tags.map(tag => (
+                        <span
+                          key={tag}
+                          className={`px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider ${
+                            isDark ? 'bg-white/[0.06] text-zinc-400' : 'bg-black/[0.04] text-zinc-500'
+                          }`}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Tip */}
+                    <div className={`flex items-start gap-2 p-2.5 rounded-xl ${
+                      isDark ? 'bg-white/[0.03]' : 'bg-black/[0.02]'
+                    }`}>
+                      <Heart size={12} className="text-pink-400 flex-shrink-0 mt-0.5" />
+                      <p className={`text-[11px] leading-relaxed ${textMuted}`}>{meal.tip}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Calorie Summary */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+                className={`${cardBg} bento-card p-4`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                    <Info size={16} className="text-green-400" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-green-500">คำแนะนำแคลอรี่</p>
+                    <p className={`text-[11px] leading-relaxed ${textMuted}`}>
+                      สำหรับ IF ควรกินประมาณ 1,400-1,800 kcal/วัน แบ่งเป็น 2-3 มื้อในช่วง Eating Window
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+
 
       <section className="space-y-4">
         <div className="flex justify-between items-center px-1">
