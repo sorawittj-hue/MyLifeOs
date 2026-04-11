@@ -5,6 +5,10 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/auth/callback(.*)",
+      "destination": "/api/auth/callback$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
