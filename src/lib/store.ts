@@ -223,23 +223,10 @@ export const useAppStore = create<AppState>()(
             };
 
             try {
-              await syncData();
-
-              // Register for push notifications
-              const { notifications } = get();
-              if (notifications.push) {
-                const token = await registerForPushNotifications();
-                if (token) set({ fcmToken: token });
-              }
-
-              // Load profile from Firebase
-              const profile = await firebaseService.getUserProfile(fbUser.uid).catch(e => {
-                console.error("Failed to load user profile:", e);
-                return null;
-              });
-
-              if (profile) {
-                set({ user: profile as User, isLoaded: true });
+              // Quick load from local to unblock UI immediately
+              const users = await db.users.toArray();
+              if (users.length > 0) {
+                set({ user: users[0], isLoaded: true });
               } else {
                 const defaultUser: User = {
                   name: fbUser.displayName || 'ผู้ใช้งาน',
@@ -250,18 +237,67 @@ export const useAppStore = create<AppState>()(
                   targetWeight: 67,
                   dailyCalorieTarget: 2200,
                 };
-                await firebaseService.setUserProfile(fbUser.uid, defaultUser).catch(e => console.error("Failed to create default user profile:", e));
-                set({ user: defaultUser, isLoaded: true });
+                try {
+                  const id = await db.users.add(defaultUser);
+                  set({ user: { ...defaultUser, id }, isLoaded: true });
+                } catch (dbErr) {
+                  console.error("Local db add failed:", dbErr);
+                  set({ user: defaultUser, isLoaded: true });
+                }
               }
+
+              // Fire and forget background tasks
+              (async () => {
+                try {
+                  // Load profile from Firebase with timeout
+                  const profilePromise = firebaseService.getUserProfile(fbUser.uid);
+                  const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Timeout fetching profile')), 10000)
+                  );
+                  
+                  const profile = await Promise.race([profilePromise, timeoutPromise]).catch(e => {
+                    console.error("Failed to load user profile:", e);
+                    return null;
+                  });
+
+                  // Update with remote profile if available
+                  if (profile) {
+                    set({ user: profile as User });
+                    // Also update local DB
+                    const users = await db.users.toArray();
+                    if (users.length > 0 && users[0].id) {
+                      await db.users.put({ ...(profile as User), id: users[0].id });
+                    }
+                  } else {
+                    const { user } = get();
+                    if (user) {
+                      await firebaseService.setUserProfile(fbUser.uid, user).catch(e => 
+                        console.error("Failed to create default remote user profile:", e)
+                      );
+                    }
+                  }
+
+                  // Sync data in background
+                  await syncData();
+
+                  // Register for push notifications if enabled
+                  const { notifications } = get();
+                  if (notifications.push) {
+                    try {
+                      const token = await registerForPushNotifications();
+                      if (token) set({ fcmToken: token });
+                    } catch (pushErr) {
+                      console.error("Register push err:", pushErr);
+                    }
+                  }
+                } catch (bgError) {
+                  console.error("Background tasks failed:", bgError);
+                }
+              })();
+              
             } catch (error) {
               console.error("Critical error during user load:", error);
-              // Fallback to local profile to unblock UI
-              const users = await db.users.toArray();
-              if (users.length > 0) {
-                set({ user: users[0], isLoaded: true });
-              } else {
-                set({ isLoaded: true }); // Prevent hanging infinitely
-              }
+              set({ isLoaded: true }); // Prevent hanging infinitely
             }
           } else {
             set({ firebaseUser: null, isAuthReady: true });
