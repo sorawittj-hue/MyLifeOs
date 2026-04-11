@@ -456,7 +456,7 @@ export default function Dashboard() {
             </div>
             <div className="h-[72px] w-[105%] -ml-[2.5%] -mb-5 mt-2 relative overflow-hidden">
               {stats.weightHistory.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1} debounce={1}>
                   <AreaChart data={stats.weightHistory}>
                     <defs>
                       <linearGradient id="colorWeightDash" x1="0" y1="0" x2="0" y2="1">

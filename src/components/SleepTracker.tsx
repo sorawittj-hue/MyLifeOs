@@ -134,7 +134,7 @@ export default function SleepTracker() {
         </h3>
         <div className="h-48 w-full">
           {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1} debounce={1}>
               <BarChart data={chartData}>
                 <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis hide domain={[0, 12]} />

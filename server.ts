@@ -14,6 +14,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 4567;
 
+// Allow external popups for Firebase OAuth (Cross-Origin-Opener-Policy)
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  next();
+});
 app.use(express.json());
 
 const oauth2Client = new OAuth2Client(
@@ -33,6 +38,12 @@ const SCOPES = [
 
 // API Routes
 app.get("/api/auth/google/url", (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(400).json({ 
+      error: "MISSING_SECRETS", 
+      message: "กรุณาตั้งค่า GOOGLE_CLIENT_ID และ GOOGLE_CLIENT_SECRET ใน Settings > Secrets ของ AI Studio ก่อนครับ" 
+    });
+  }
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,

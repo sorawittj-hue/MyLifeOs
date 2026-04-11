@@ -21,8 +21,18 @@ export default function SettingsScreen() {
     haptics.light();
     try {
       const response = await fetch('/api/auth/google/url');
-      const { url } = await response.json();
+      const data = await response.json();
       
+      if (!response.ok) {
+        if (data.error === 'MISSING_SECRETS') {
+          alert(data.message);
+        } else {
+          alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + (data.message || 'Unknown error'));
+        }
+        return;
+      }
+
+      const { url } = data;
       const authWindow = window.open(url, 'google_fit_auth', 'width=600,height=700');
       
       if (!authWindow) {

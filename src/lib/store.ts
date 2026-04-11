@@ -154,8 +154,15 @@ export const useAppStore = create<AppState>()(
       login: async () => {
         try {
           await signInWithPopup(auth, googleProvider);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Login failed:', error);
+          if (error.code === 'auth/configuration-not-found') {
+            alert('ไม่สามารถเข้าสู่ระบบได้: คุณยังไม่ได้เปิดใช้งาน Google Sign-in ใน Firebase Console ของโปรเจกต์นี้ครับ');
+          } else if (error.code === 'auth/unauthorized-domain') {
+            alert('ไม่สามารถเข้าสู่ระบบได้: โดเมนปัจจุบันยังไม่ได้รับอนุญาต กรุณาไปที่ Firebase Console > Authentication > Settings > Authorized domains แล้วเพิ่ม ' + window.location.hostname);
+          } else {
+            alert(`เข้าสู่ระบบไม่สำเร็จ: ${error.message}`);
+          }
         }
       },
 

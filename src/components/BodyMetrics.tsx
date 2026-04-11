@@ -257,7 +257,7 @@ export default function BodyMetrics() {
               </div>
               <div className="h-64 w-full" style={{ minWidth: 0 }}>
                 {chartData.length > 1 ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={1}>
+                  <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1} debounce={1}>
                     <AreaChart data={chartData}>
                       <defs>
                         <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
