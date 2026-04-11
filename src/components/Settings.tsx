@@ -20,10 +20,12 @@ export default function SettingsScreen() {
   const handleGoogleFitConnect = async () => {
     haptics.light();
     try {
+      console.log('[Settings] Initiating Google Fit OAuth flow');
       const response = await fetch('/api/auth/google/url');
       const data = await response.json();
-      
+
       if (!response.ok) {
+        console.error('[Settings] Google Fit auth URL failed:', data);
         if (data.error === 'MISSING_SECRETS') {
           alert(data.message);
         } else {
@@ -33,14 +35,18 @@ export default function SettingsScreen() {
       }
 
       const { url } = data;
+      console.log('[Settings] Opening Google Fit auth window:', url);
       const authWindow = window.open(url, 'google_fit_auth', 'width=600,height=700');
-      
+
       if (!authWindow) {
         alert('กรุณาอนุญาตป๊อปอัปเพื่อเชื่อมต่อ Google Fit');
         return;
       }
+
+      console.log('[Settings] Auth window opened successfully');
     } catch (error) {
-      console.error('Failed to get auth URL:', error);
+      console.error('[Settings] Failed to get auth URL:', error);
+      alert('ไม่สามารถเชื่อมต่อ Google Fit ได้: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
@@ -68,9 +74,14 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      console.log('[Settings] Received message event:', event.data?.type);
       if (event.data?.type === 'GOOGLE_FIT_AUTH_SUCCESS') {
+        console.log('[Settings] Google Fit auth success, storing tokens');
         setGoogleFitTokens(event.data.tokens);
         sendNotification('เชื่อมต่อ Google Fit สำเร็จ!', { body: 'ตอนนี้คุณสามารถซิงค์ข้อมูลจาก Samsung Health และนาฬิกาของคุณได้แล้ว' });
+      } else if (event.data?.type === 'GOOGLE_FIT_AUTH_ERROR') {
+        console.error('[Settings] Google Fit auth error:', event.data.error);
+        alert('การเชื่อมต่อ Google Fit ล้มเหลว: ' + (event.data.error || 'Unknown error'));
       }
     };
     window.addEventListener('message', handleMessage);
@@ -137,7 +148,7 @@ export default function SettingsScreen() {
     try {
       const allData: any = {};
       const tables = db.tables;
-      
+
       for (const table of tables) {
         allData[table.name] = await table.toArray();
       }
@@ -178,7 +189,7 @@ export default function SettingsScreen() {
       </header>
 
       {/* Profile Section */}
-      <motion.section 
+      <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className={`${cardBg} bento-card overflow-hidden`}
@@ -191,7 +202,7 @@ export default function SettingsScreen() {
             <h2 className="text-lg font-bold">{user?.name || 'ผู้ใช้งาน'}</h2>
             <p className={`text-sm ${textMuted}`}>LifeOS Member</p>
           </div>
-          <button 
+          <button
             onClick={() => setShowEditProfile(true)}
             className={`ml-auto p-2 rounded-xl transition-colors ${isDark ? 'bg-white/[0.06] text-zinc-400 hover:text-white' : 'bg-black/[0.04] text-zinc-500 hover:text-zinc-900'}`}
           >
@@ -217,7 +228,7 @@ export default function SettingsScreen() {
       {/* Preferences */}
       <section className="space-y-3">
         <h3 className={`text-xs font-bold ${textMuted} uppercase tracking-widest px-1`}>ความชอบ</h3>
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -231,7 +242,7 @@ export default function SettingsScreen() {
               <span className="font-medium">ธีม</span>
             </div>
             <div className={`flex p-1 rounded-xl ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]'}`}>
-              <button 
+              <button
                 onClick={() => {
                   haptics.light();
                   setTheme('dark');
@@ -240,7 +251,7 @@ export default function SettingsScreen() {
               >
                 มืด
               </button>
-              <button 
+              <button
                 onClick={() => {
                   haptics.light();
                   setTheme('light');
@@ -259,7 +270,7 @@ export default function SettingsScreen() {
               <span className="font-medium">หน่วย</span>
             </div>
             <div className={`flex p-1 rounded-xl ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]'}`}>
-              <button 
+              <button
                 onClick={() => {
                   haptics.light();
                   setUnits('metric');
@@ -268,7 +279,7 @@ export default function SettingsScreen() {
               >
                 เมตริก
               </button>
-              <button 
+              <button
                 onClick={() => {
                   haptics.light();
                   setUnits('imperial');
@@ -286,7 +297,7 @@ export default function SettingsScreen() {
               </div>
               <span className="font-medium">การแจ้งเตือน</span>
             </div>
-            <button 
+            <button
               onClick={() => setShowNotifications(true)}
               className={`${textMuted} hover:text-green-500 transition-colors`}
             >
@@ -299,7 +310,7 @@ export default function SettingsScreen() {
       {/* Devices & Integrations */}
       <section className="space-y-3">
         <h3 className={`text-xs font-bold ${textMuted} uppercase tracking-widest px-1`}>อุปกรณ์และการเชื่อมต่อ</h3>
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
@@ -315,7 +326,7 @@ export default function SettingsScreen() {
                 <span className={`text-[10px] ${textMuted}`}>ใช้ข้อมูลจำลองแทนข้อมูลจริง</span>
               </div>
             </div>
-            <button 
+            <button
               onClick={() => {
                 haptics.light();
                 setDemoMode(!demoMode);
@@ -339,13 +350,13 @@ export default function SettingsScreen() {
               <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-1 rounded-full uppercase">Connected</span>
             ) : (
               <div className="flex gap-2">
-                <button 
+                <button
                   onClick={() => setShowOAuthHelp(true)}
                   className={`p-2 rounded-lg ${isDark ? 'bg-white/[0.06] text-zinc-400' : 'bg-black/[0.04] text-zinc-500'}`}
                 >
                   <Info size={16} />
                 </button>
-                <button 
+                <button
                   onClick={handleGoogleFitConnect}
                   disabled={demoMode}
                   className={`text-xs font-bold ${demoMode ? 'text-zinc-500' : 'text-green-500 hover:underline'}`}
@@ -368,7 +379,7 @@ export default function SettingsScreen() {
             {isGoogleFitConnected ? (
               <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-1 rounded-full uppercase">Connected</span>
             ) : (
-              <button 
+              <button
                 onClick={handleGoogleFitConnect}
                 className="text-xs font-bold text-green-500 hover:underline"
               >
@@ -378,12 +389,11 @@ export default function SettingsScreen() {
           </div>
           {isGoogleFitConnected && (
             <div className="p-4">
-              <button 
+              <button
                 onClick={handleSync}
                 disabled={isSyncing}
-                className={`w-full py-3 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm transition-all ${
-                  isSyncing ? 'bg-zinc-100 text-zinc-400' : 'bg-green-500 text-black shadow-lg shadow-green-500/20 active:scale-95'
-                }`}
+                className={`w-full py-3 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm transition-all ${isSyncing ? 'bg-zinc-100 text-zinc-400' : 'bg-green-500 text-black shadow-lg shadow-green-500/20 active:scale-95'
+                  }`}
               >
                 <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
                 {isSyncing ? 'กำลังซิงค์ข้อมูล...' : 'ซิงค์ข้อมูลตอนนี้'}
@@ -399,13 +409,13 @@ export default function SettingsScreen() {
       {/* Data & Privacy */}
       <section className="space-y-3">
         <h3 className={`text-xs font-bold ${textMuted} uppercase tracking-widest px-1`}>ข้อมูลและความเป็นส่วนตัว</h3>
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className={`${cardBg} bento-card divide-y ${divideColor}`}
         >
-          <button 
+          <button
             onClick={() => setShowPrivacy(true)}
             className={`w-full p-4 flex justify-between items-center transition-colors ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.02]'}`}
           >
@@ -417,7 +427,7 @@ export default function SettingsScreen() {
             </div>
             <ChevronRight size={20} className={isDark ? 'text-zinc-700' : 'text-zinc-300'} />
           </button>
-          <button 
+          <button
             onClick={exportData}
             disabled={isExporting}
             className={`w-full p-4 flex justify-between items-center transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.02]'}`}
@@ -430,7 +440,7 @@ export default function SettingsScreen() {
             </div>
             <ChevronRight size={20} className={isDark ? 'text-zinc-700' : 'text-zinc-300'} />
           </button>
-          <button 
+          <button
             onClick={() => setShowClearConfirm(true)}
             className={`w-full p-4 flex justify-between items-center transition-colors group ${isDark ? 'hover:bg-red-500/[0.04]' : 'hover:bg-red-50'}`}
           >
@@ -449,15 +459,14 @@ export default function SettingsScreen() {
         <p className={`text-[10px] ${isDark ? 'text-zinc-700' : 'text-zinc-500'}`}>สร้างด้วย ❤️ เพื่อสุขภาพของคุณ</p>
       </div>
 
-      <motion.button 
+      <motion.button
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         onClick={handleLogout}
-        className={`w-full border font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors ${
-          isDark 
-            ? 'glass-card text-zinc-400 hover:bg-white/[0.06]' 
-            : 'glass-card-light text-zinc-500 hover:bg-black/[0.04]'
-        }`}
+        className={`w-full border font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors ${isDark
+          ? 'glass-card text-zinc-400 hover:bg-white/[0.06]'
+          : 'glass-card-light text-zinc-500 hover:bg-black/[0.04]'
+          }`}
       >
         <LogOut size={18} />
         ออกจากระบบ
@@ -467,7 +476,7 @@ export default function SettingsScreen() {
       <AnimatePresence>
         {showOAuthHelp && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowOAuthHelp(false)}>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -480,10 +489,10 @@ export default function SettingsScreen() {
                   <X size={24} />
                 </button>
               </div>
-              
+
               <div className={`space-y-4 text-sm ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
                 <p className="text-red-500 font-bold">⚠️ สำคัญ: เพื่อความปลอดภัย ห้ามแชร์รหัสผ่าน Gmail ให้ใครเด็ดขาด ผมไม่สามารถเข้าถึงบัญชีของคุณเพื่อตั้งค่าให้ได้ คุณต้องทำตามขั้นตอนสั้นๆ นี้ครับ:</p>
-                
+
                 <div className="space-y-2">
                   <p className="font-bold text-white">1. ไปที่ Google Cloud Console</p>
                   <p className="text-xs">ค้นหาใน Google ว่า "Google Cloud Credentials" แล้วเข้าลิงก์แรก</p>
@@ -511,7 +520,7 @@ export default function SettingsScreen() {
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={() => setShowOAuthHelp(false)}
                 className={`w-full font-bold py-4 rounded-2xl transition-colors ${isDark ? 'bg-white/[0.06] text-white hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-900 hover:bg-black/[0.06]'}`}
               >
@@ -524,7 +533,7 @@ export default function SettingsScreen() {
       <AnimatePresence>
         {showEditProfile && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowEditProfile(false)}>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -537,34 +546,34 @@ export default function SettingsScreen() {
                   <X size={24} />
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div className="space-y-1">
                   <label className={`text-xs font-bold ${textMuted} uppercase`}>ชื่อ</label>
-                  <input 
+                  <input
                     type="text"
                     value={profileForm.name}
-                    onChange={e => setProfileForm({...profileForm, name: e.target.value})}
+                    onChange={e => setProfileForm({ ...profileForm, name: e.target.value })}
                     className={`w-full rounded-xl p-3 outline-none focus:ring-2 focus:ring-green-500 ${isDark ? 'input-premium text-white' : 'input-premium-light text-zinc-900'}`}
                     placeholder="ใส่ชื่อของคุณ"
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className={`text-xs font-bold ${textMuted} uppercase`}>อายุ</label>
-                    <input 
+                    <input
                       type="number"
                       value={profileForm.age}
-                      onChange={e => setProfileForm({...profileForm, age: parseInt(e.target.value)})}
+                      onChange={e => setProfileForm({ ...profileForm, age: parseInt(e.target.value) })}
                       className={`w-full border-none rounded-xl p-3 focus:ring-2 focus:ring-green-500 outline-none ${theme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-900'}`}
                     />
                   </div>
                   <div className="space-y-1">
                     <label className={`text-xs font-bold ${textMuted} uppercase`}>เพศ</label>
-                    <select 
+                    <select
                       value={profileForm.gender}
-                      onChange={e => setProfileForm({...profileForm, gender: e.target.value})}
+                      onChange={e => setProfileForm({ ...profileForm, gender: e.target.value })}
                       className={`w-full border-none rounded-xl p-3 focus:ring-2 focus:ring-green-500 outline-none ${theme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-900'}`}
                     >
                       <option value="male">ชาย</option>
@@ -572,23 +581,23 @@ export default function SettingsScreen() {
                     </select>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className={`text-xs font-bold ${textMuted} uppercase`}>น้ำหนัก (กก.)</label>
-                    <input 
+                    <input
                       type="number"
                       value={profileForm.weight}
-                      onChange={e => setProfileForm({...profileForm, weight: parseFloat(e.target.value)})}
+                      onChange={e => setProfileForm({ ...profileForm, weight: parseFloat(e.target.value) })}
                       className={`w-full border-none rounded-xl p-3 focus:ring-2 focus:ring-green-500 outline-none ${theme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-900'}`}
                     />
                   </div>
                   <div className="space-y-1">
                     <label className={`text-xs font-bold ${textMuted} uppercase`}>ส่วนสูง (ซม.)</label>
-                    <input 
+                    <input
                       type="number"
                       value={profileForm.height}
-                      onChange={e => setProfileForm({...profileForm, height: parseFloat(e.target.value)})}
+                      onChange={e => setProfileForm({ ...profileForm, height: parseFloat(e.target.value) })}
                       className={`w-full border-none rounded-xl p-3 focus:ring-2 focus:ring-green-500 outline-none ${theme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-900'}`}
                     />
                   </div>
@@ -597,26 +606,26 @@ export default function SettingsScreen() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className={`text-xs font-bold ${textMuted} uppercase`}>เป้าหมาย (กก.)</label>
-                    <input 
+                    <input
                       type="number"
                       value={profileForm.targetWeight}
-                      onChange={e => setProfileForm({...profileForm, targetWeight: parseFloat(e.target.value)})}
+                      onChange={e => setProfileForm({ ...profileForm, targetWeight: parseFloat(e.target.value) })}
                       className={`w-full border-none rounded-xl p-3 focus:ring-2 focus:ring-green-500 outline-none ${theme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-900'}`}
                     />
                   </div>
                   <div className="space-y-1">
                     <label className={`text-xs font-bold ${textMuted} uppercase`}>แคลอรี่ต่อวัน</label>
-                    <input 
+                    <input
                       type="number"
                       value={profileForm.dailyCalorieTarget}
-                      onChange={e => setProfileForm({...profileForm, dailyCalorieTarget: parseInt(e.target.value)})}
+                      onChange={e => setProfileForm({ ...profileForm, dailyCalorieTarget: parseInt(e.target.value) })}
                       className={`w-full border-none rounded-xl p-3 focus:ring-2 focus:ring-green-500 outline-none ${theme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-900'}`}
                     />
                   </div>
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={handleSaveProfile}
                 className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"
               >
@@ -632,7 +641,7 @@ export default function SettingsScreen() {
       <AnimatePresence>
         {showPrivacy && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowPrivacy(false)}>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -654,7 +663,7 @@ export default function SettingsScreen() {
                 <h3 className={`font-bold ${isDark ? 'text-white' : 'text-zinc-900'}`}>3. การควบคุมข้อมูล</h3>
                 <p>คุณสามารถลบข้อมูลทั้งหมดได้ตลอดเวลาผ่านเมนู "ลบข้อมูลทั้งหมด" ในหน้าการตั้งค่านี้</p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowPrivacy(false)}
                 className={`w-full font-bold py-4 rounded-2xl transition-colors ${isDark ? 'bg-white/[0.06] text-white hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-900 hover:bg-black/[0.06]'}`}
               >
@@ -669,7 +678,7 @@ export default function SettingsScreen() {
       <AnimatePresence>
         {showNotifications && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowNotifications(false)}>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -695,7 +704,7 @@ export default function SettingsScreen() {
                         <p className="font-bold">{notif.title}</p>
                         <p className={`text-xs ${textMuted}`}>{notif.desc}</p>
                       </div>
-                      <button 
+                      <button
                         onClick={() => toggleNotification(notif.id as keyof typeof notifications)}
                         className={`w-12 h-6 rounded-full relative p-1 transition-colors ${isActive ? 'bg-green-500' : (isDark ? 'bg-white/[0.1]' : 'bg-black/[0.1]')}`}
                       >
@@ -705,7 +714,7 @@ export default function SettingsScreen() {
                   );
                 })}
               </div>
-              <button 
+              <button
                 onClick={() => setShowNotifications(false)}
                 className={`w-full font-bold py-4 rounded-2xl transition-colors ${isDark ? 'bg-white/[0.06] text-white hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-900 hover:bg-black/[0.06]'}`}
               >
@@ -720,7 +729,7 @@ export default function SettingsScreen() {
       <AnimatePresence>
         {showClearConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onClick={() => setShowClearConfirm(false)}>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -735,13 +744,13 @@ export default function SettingsScreen() {
                 <p className={textMuted}>ข้อมูลทั้งหมดของคุณจะถูกลบถาวรและไม่สามารถกู้คืนได้</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <button 
+                <button
                   onClick={() => setShowClearConfirm(false)}
                   className={`font-bold py-4 rounded-2xl transition-colors ${isDark ? 'bg-white/[0.06] text-white hover:bg-white/[0.1]' : 'bg-black/[0.04] text-zinc-900 hover:bg-black/[0.06]'}`}
                 >
                   ยกเลิก
                 </button>
-                <button 
+                <button
                   onClick={clearData}
                   className="bg-red-500 text-white font-bold py-4 rounded-2xl hover:bg-red-600 transition-colors"
                 >

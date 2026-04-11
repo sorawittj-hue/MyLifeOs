@@ -1,13 +1,13 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
   onSnapshot,
   Timestamp,
   addDoc,
@@ -47,7 +47,7 @@ interface FirestoreErrorInfo {
   }
 }
 
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -66,8 +66,20 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+
+  // Log structured error for easy debugging
+  console.error(`[FIRESTORE ERROR] ${operationType} on ${path}:`, {
+    message: errInfo.error,
+    code: (error as any)?.code,
+    userId: errInfo.authInfo.userId,
+    isAuthenticated: !!auth.currentUser,
+    operationType,
+    path
+  });
+
+  // Throw a proper error with details
+  const errorMessage = `[${operationType}] ${errInfo.error} (User: ${errInfo.authInfo.userId || 'anonymous'}, Path: ${path || 'unknown'})`;
+  throw new Error(errorMessage);
 }
 
 export const firebaseService = {
@@ -75,10 +87,14 @@ export const firebaseService = {
   async getUserProfile(uid: string) {
     const path = `users/${uid}`;
     try {
+      console.log(`[FirebaseService] Getting user profile: ${path}`);
       const docRef = doc(db, "users", uid);
       const docSnap = await getDoc(docRef);
-      return docSnap.exists() ? docSnap.data() : null;
+      const data = docSnap.exists() ? docSnap.data() : null;
+      console.log(`[FirebaseService] User profile ${docSnap.exists() ? 'found' : 'not found'}`);
+      return data;
     } catch (error) {
+      console.error(`[FirebaseService] Failed to get user profile:`, error);
       handleFirestoreError(error, OperationType.GET, path);
     }
   },
@@ -86,9 +102,12 @@ export const firebaseService = {
   async setUserProfile(uid: string, data: any) {
     const path = `users/${uid}`;
     try {
+      console.log(`[FirebaseService] Setting user profile: ${path}`, { uid, dataKeys: Object.keys(data) });
       const docRef = doc(db, "users", uid);
       await setDoc(docRef, { ...data, uid }, { merge: true });
+      console.log(`[FirebaseService] User profile saved successfully`);
     } catch (error) {
+      console.error(`[FirebaseService] Failed to set user profile:`, error);
       handleFirestoreError(error, OperationType.WRITE, path);
     }
   },
@@ -96,12 +115,15 @@ export const firebaseService = {
   // Generic Collection Methods
   subscribeToCollection<T>(collectionName: string, uid: string, callback: (data: T[]) => void) {
     const path = collectionName;
+    console.log(`[FirebaseService] Subscribing to ${collectionName} for user ${uid}`);
     const q = query(collection(db, collectionName), where("uid", "==", uid));
-    
+
     return onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
+      console.log(`[FirebaseService] ${collectionName} snapshot: ${data.length} documents`);
       callback(data);
     }, (error) => {
+      console.error(`[FirebaseService] Subscription error for ${collectionName}:`, error);
       handleFirestoreError(error, OperationType.LIST, path);
     });
   },
@@ -109,14 +131,18 @@ export const firebaseService = {
   async getCollection<T>(collectionName: string, uid: string, queryConstraints: QueryConstraint[] = []): Promise<T[]> {
     const path = collectionName;
     try {
+      console.log(`[FirebaseService] Getting collection ${collectionName} for user ${uid}`);
       const q = query(
-        collection(db, collectionName), 
+        collection(db, collectionName),
         where("uid", "==", uid),
         ...queryConstraints
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
+      console.log(`[FirebaseService] Retrieved ${data.length} documents from ${collectionName}`);
+      return data;
     } catch (error) {
+      console.error(`[FirebaseService] Failed to get collection ${collectionName}:`, error);
       handleFirestoreError(error, OperationType.LIST, path);
       return [];
     }
@@ -126,10 +152,16 @@ export const firebaseService = {
     const path = collectionName;
     try {
       const uid = auth.currentUser?.uid;
-      if (!uid) throw new Error("User not authenticated");
+      if (!uid) {
+        console.error(`[FirebaseService] Cannot add to ${collectionName}: User not authenticated`);
+        throw new Error("User not authenticated");
+      }
+      console.log(`[FirebaseService] Adding to ${collectionName}`, { uid, dataType: typeof data });
       const docRef = await addDoc(collection(db, collectionName), { ...data, uid });
+      console.log(`[FirebaseService] Added document to ${collectionName} with ID: ${docRef.id}`);
       return docRef.id;
     } catch (error) {
+      console.error(`[FirebaseService] Failed to add to collection ${collectionName}:`, error);
       handleFirestoreError(error, OperationType.CREATE, path);
     }
   },

@@ -49,7 +49,7 @@ interface AppState {
   dashboardWidgets: DashboardWidget[];
   // FCM token
   fcmToken: string | null;
-  
+
   // Actions
   setUser: (user: User) => void;
   setActiveTab: (tab: TabName) => void;
@@ -97,15 +97,15 @@ export const useAppStore = create<AppState>()(
       },
 
       setActiveTab: (tab) => set({ activeTab: tab }),
-      
+
       setTheme: (theme) => set({ theme }),
-      
+
       setUnits: (units) => set({ units }),
-      
-      setNotifications: (notifs) => set((state) => ({ 
-        notifications: { ...state.notifications, ...notifs } 
+
+      setNotifications: (notifs) => set((state) => ({
+        notifications: { ...state.notifications, ...notifs }
       })),
-      
+
       setGoogleFitTokens: (tokens) => {
         if (tokens) {
           set({ googleFitTokens: tokens, isGoogleFitConnected: true });
@@ -113,7 +113,7 @@ export const useAppStore = create<AppState>()(
           set({ googleFitTokens: null, isGoogleFitConnected: false });
         }
       },
-      
+
       setDemoMode: (enabled) => set({ demoMode: enabled }),
 
       // ── Dashboard Widget Operations ────────────────────────
@@ -129,7 +129,7 @@ export const useAppStore = create<AppState>()(
       },
 
       toggleDashboardWidget: (widgetId) => {
-        const widgets = get().dashboardWidgets.map(w => 
+        const widgets = get().dashboardWidgets.map(w =>
           w.id === widgetId ? { ...w, visible: !w.visible } : w
         );
         set({ dashboardWidgets: widgets });
@@ -138,30 +138,61 @@ export const useAppStore = create<AppState>()(
       // ── Sync Operations ────────────────────────────────────
       triggerSync: async () => {
         const { firebaseUser } = get();
-        if (!firebaseUser) return;
+        if (!firebaseUser) {
+          console.warn('[Store] Cannot sync: User not authenticated');
+          return;
+        }
 
+        console.log('[Store] Triggering sync for user:', firebaseUser.uid);
         set({ syncStatus: 'syncing' });
+
         try {
-          await syncAllCollections(firebaseUser.uid);
+          const result = await syncAllCollections(firebaseUser.uid);
           const pending = await getPendingSyncCount();
-          set({ syncStatus: 'idle', pendingSyncCount: pending });
+
+          if (result.errors.length > 0) {
+            console.error('[Store] Sync completed with errors:', result.errors);
+            set({
+              syncStatus: 'error',
+              pendingSyncCount: pending
+            });
+          } else {
+            console.log(`[Store] Sync successful: ↑${result.pushed} ↓${result.pulled} ⚡${result.conflicts}`);
+            set({
+              syncStatus: 'idle',
+              pendingSyncCount: pending
+            });
+          }
         } catch (error) {
-          console.error('Sync failed:', error);
+          console.error('[Store] Sync failed:', error);
           set({ syncStatus: 'error' });
         }
       },
 
       login: async () => {
+        console.log('[Store] Initiating Google login...');
         try {
           await signInWithPopup(auth, googleProvider);
+          console.log('[Store] Login successful');
         } catch (error: any) {
-          console.error('Login failed:', error);
+          console.error('[Store] Login failed:', error);
+
+          // Provide user-friendly error messages
+          if (error.code === 'auth/popup-closed-by-user') {
+            console.log('[Store] User closed popup');
+            return; // Don't show alert for this
+          }
+
           if (error.code === 'auth/configuration-not-found') {
             alert('ไม่สามารถเข้าสู่ระบบได้: คุณยังไม่ได้เปิดใช้งาน Google Sign-in ใน Firebase Console ของโปรเจกต์นี้ครับ');
           } else if (error.code === 'auth/unauthorized-domain') {
             alert('ไม่สามารถเข้าสู่ระบบได้: โดเมนปัจจุบันยังไม่ได้รับอนุญาต กรุณาไปที่ Firebase Console > Authentication > Settings > Authorized domains แล้วเพิ่ม ' + window.location.hostname);
+          } else if (error.code === 'auth/popup-blocked') {
+            alert('กรุณาอนุญาตป๊อปอัปในเบราว์เซอร์ของคุณเพื่อเข้าสู่ระบบ');
+          } else if (error.code === 'auth/cancelled-popup-request') {
+            console.log('[Store] Login cancelled');
           } else {
-            alert(`เข้าสู่ระบบไม่สำเร็จ: ${error.message}`);
+            alert(`เข้าสู่ระบบไม่สำเร็จ: ${error.message || 'Unknown error'}`);
           }
         }
       },
@@ -177,57 +208,100 @@ export const useAppStore = create<AppState>()(
       },
 
       loadUser: async () => {
+        console.log('[Store] Loading user data...');
+
         // Monitor online status
-        const updateOnlineStatus = () => set({ isOnline: navigator.onLine });
+        const updateOnlineStatus = () => {
+          const online = navigator.onLine;
+          console.log(`[Store] Online status changed: ${online}`);
+          set({ isOnline: online });
+
+          // Auto-sync when coming back online
+          if (online) {
+            const { firebaseUser } = get();
+            if (firebaseUser) {
+              console.log('[Store] Back online - triggering sync');
+              syncAllCollections(firebaseUser.uid).then(result => {
+                const pending = getPendingSyncCount();
+                set({
+                  pendingSyncCount: pending,
+                  syncStatus: result.errors.length > 0 ? 'error' : 'idle'
+                });
+              }).catch(err => {
+                console.error('[Store] Auto-sync failed:', err);
+              });
+            }
+          }
+        };
+
         window.addEventListener('online', updateOnlineStatus);
         window.addEventListener('offline', updateOnlineStatus);
 
         // Listen for auth changes
         onAuthStateChanged(auth, async (fbUser) => {
+          console.log('[Store] Auth state changed:', fbUser ? fbUser.uid : 'null');
+
           if (fbUser) {
             set({ firebaseUser: fbUser, isAuthReady: true });
-            
-            // Sync local data to Firebase
+
+            // Sync local data to Firebase with better error handling
             const syncData = async () => {
+              console.log('[Store] Starting data sync to Firebase...');
               const collections = [
-                'foodLogs', 'waterLogs', 'stepLogs', 'sleepLogs', 
-                'vitals', 'bodyMetrics', 'habits', 'habitCompletions', 
+                'foodLogs', 'waterLogs', 'stepLogs', 'sleepLogs',
+                'vitals', 'bodyMetrics', 'habits', 'habitCompletions',
                 'fastingSessions', 'workouts', 'chatMessages'
               ] as const;
 
               for (const col of collections) {
                 try {
+                  console.log(`[Store] Syncing ${col}...`);
                   const table = db[col];
                   const localData = await table.toArray();
-                  if (localData.length > 0) {
-                    const remoteData = await firebaseService.getCollection<any>(col, fbUser.uid);
-                    const remoteTimestamps = new Set(remoteData.map(d => d.timestamp || d.date || d.startTime));
 
-                    const itemsToSync = localData.filter(item => {
-                      const identifier = (item as any).timestamp || (item as any).date || (item as any).startTime;
-                      return !remoteTimestamps.has(identifier);
-                    });
+                  if (localData.length === 0) {
+                    console.log(`[Store] ${col}: No local data to sync`);
+                    continue;
+                  }
 
-                    if (itemsToSync.length > 0) {
-                      for (let i = 0; i < itemsToSync.length; i += 500) {
-                        const chunk = itemsToSync.slice(i, i + 500);
-                        await firebaseService.batchAdd(col, chunk, fbUser.uid);
-                      }
+                  console.log(`[Store] ${col}: ${localData.length} local records to check`);
+                  const remoteData = await firebaseService.getCollection<any>(col, fbUser.uid);
+                  const remoteTimestamps = new Set(remoteData.map(d => d.timestamp || d.date || d.startTime));
+
+                  const itemsToSync = localData.filter(item => {
+                    const identifier = (item as any).timestamp || (item as any).date || (item as any).startTime;
+                    return !remoteTimestamps.has(identifier);
+                  });
+
+                  if (itemsToSync.length > 0) {
+                    console.log(`[Store] ${col}: Syncing ${itemsToSync.length} new items`);
+                    for (let i = 0; i < itemsToSync.length; i += 500) {
+                      const chunk = itemsToSync.slice(i, i + 500);
+                      await firebaseService.batchAdd(col, chunk, fbUser.uid);
                     }
+                    console.log(`[Store] ${col}: Cleared local table after sync`);
                     await table.clear();
+                  } else {
+                    console.log(`[Store] ${col}: All items already synced`);
                   }
                 } catch (error) {
-                  console.error(`Failed to sync collection ${col}:`, error);
+                  console.error(`[Store] Failed to sync collection ${col}:`, error);
+                  // Continue with next collection instead of failing completely
                 }
               }
+
+              console.log('[Store] Data sync completed');
             };
 
             try {
               // Quick load from local to unblock UI immediately
+              console.log('[Store] Loading local user data...');
               const users = await db.users.toArray();
               if (users.length > 0) {
+                console.log('[Store] Local user found:', users[0].name);
                 set({ user: users[0], isLoaded: true });
               } else {
+                console.log('[Store] No local user, creating default...');
                 const defaultUser: User = {
                   name: fbUser.displayName || 'ผู้ใช้งาน',
                   age: 31,
@@ -239,9 +313,10 @@ export const useAppStore = create<AppState>()(
                 };
                 try {
                   const id = await db.users.add(defaultUser);
+                  console.log('[Store] Default user created with ID:', id);
                   set({ user: { ...defaultUser, id }, isLoaded: true });
                 } catch (dbErr) {
-                  console.error("Local db add failed:", dbErr);
+                  console.error("[Store] Local db add failed:", dbErr);
                   set({ user: defaultUser, isLoaded: true });
                 }
               }
@@ -249,15 +324,17 @@ export const useAppStore = create<AppState>()(
               // Fire and forget background tasks
               (async () => {
                 try {
+                  console.log('[Store] Running background tasks...');
+
                   // Load profile from Firebase with timeout
                   const profilePromise = firebaseService.getUserProfile(fbUser.uid);
                   let timeoutId: NodeJS.Timeout | number;
                   const timeoutPromise = new Promise((_, reject) => {
                     timeoutId = setTimeout(() => reject(new Error('Timeout fetching profile')), 10000);
                   });
-                  
+
                   const profile = await Promise.race([profilePromise, timeoutPromise]).catch(e => {
-                    console.error("Failed to load user profile:", e);
+                    console.error("[Store] Failed to load user profile:", e);
                     return null;
                   }).finally(() => {
                     clearTimeout(timeoutId);
@@ -265,6 +342,7 @@ export const useAppStore = create<AppState>()(
 
                   // Update with remote profile if available
                   if (profile) {
+                    console.log('[Store] Remote profile loaded');
                     set({ user: profile as User });
                     // Also update local DB
                     const users = await db.users.toArray();
@@ -272,38 +350,49 @@ export const useAppStore = create<AppState>()(
                       await db.users.put({ ...(profile as User), id: users[0].id });
                     }
                   } else {
+                    console.log('[Store] No remote profile, creating from local...');
                     const { user } = get();
                     if (user) {
-                      await firebaseService.setUserProfile(fbUser.uid, user).catch(e => 
-                        console.error("Failed to create default remote user profile:", e)
+                      await firebaseService.setUserProfile(fbUser.uid, user).catch(e =>
+                        console.error("[Store] Failed to create default remote user profile:", e)
                       );
                     }
                   }
 
                   // Sync data in background
+                  console.log('[Store] Starting background data sync...');
                   await syncData();
 
                   // Register for push notifications if enabled
                   const { notifications } = get();
                   if (notifications.push) {
                     try {
+                      console.log('[Store] Registering for push notifications...');
                       const token = await registerForPushNotifications();
-                      if (token) set({ fcmToken: token });
+                      if (token) {
+                        console.log('[Store] Push token received');
+                        set({ fcmToken: token });
+                      }
                     } catch (pushErr) {
-                      console.error("Register push err:", pushErr);
+                      console.error("[Store] Register push err:", pushErr);
                     }
                   }
+
+                  console.log('[Store] Background tasks completed');
                 } catch (bgError) {
-                  console.error("Background tasks failed:", bgError);
+                  console.error("[Store] Background tasks failed:", bgError);
+                  // Don't let background task failures affect user experience
                 }
               })();
-              
+
             } catch (error) {
-              console.error("Critical error during user load:", error);
+              console.error("[Store] Critical error during user load:", error);
               set({ isLoaded: true }); // Prevent hanging infinitely
             }
           } else {
+            console.log('[Store] User logged out');
             set({ firebaseUser: null, isAuthReady: true });
+
             // Fallback to local user if not logged in
             try {
               const users = await db.users.toArray();
@@ -323,17 +412,19 @@ export const useAppStore = create<AppState>()(
                 set({ user: { ...defaultUser, id }, isLoaded: true });
               }
             } catch (error) {
-              console.error("Local database error during user load:", error);
+              console.error("[Store] Local database error during user load:", error);
               set({ isLoaded: true }); // Prevent UI from hanging
             }
           }
         });
-        
+
         try {
           await seedDatabase();
         } catch (e) {
-          console.error("Failed to seed database:", e);
+          console.error("[Store] Failed to seed database:", e);
         }
+
+        console.log('[Store] loadUser completed');
       },
     }),
     {

@@ -1,18 +1,18 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, loadEnv} from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default defineConfig(async ({mode}) => {
+export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, '.', '');
-  
+
   // Conditionally load PWA plugin (only if installed)
   const plugins: any[] = [react(), tailwindcss()];
-  
+
   try {
     const { VitePWA } = await import('vite-plugin-pwa');
     plugins.push(
@@ -81,6 +81,45 @@ export default defineConfig(async ({mode}) => {
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
       },
+    },
+    build: {
+      // Enable source maps for debugging in production (optional)
+      sourcemap: false,
+
+      // Chunk size warning threshold
+      chunkSizeWarningLimit: 1000,
+
+      // Optimize CSS
+      cssMinify: true,
+
+      // Rollup options for better code splitting
+      rollupOptions: {
+        output: {
+          // Manual chunks for better caching
+          manualChunks: {
+            // Vendor chunks - separate large dependencies
+            'firebase-core': ['firebase/app', 'firebase/firestore', 'firebase/auth'],
+            'firebase-messaging': ['firebase/messaging'],
+            'ui-framework': ['react', 'react-dom', 'react-router-dom'],
+            'charts': ['recharts'],
+            'animations': ['motion'],
+            'utils': ['date-fns', 'axios', 'dexie', 'zustand'],
+          },
+          // Better file naming
+          chunkFileNames: 'assets/js/[name]-[hash].js',
+          entryFileNames: 'assets/js/[name]-[hash].js',
+          assetFileNames: (assetInfo) => {
+            if (assetInfo.name && assetInfo.name.endsWith('.css')) {
+              return 'assets/css/[name]-[hash][extname]';
+            }
+            return 'assets/[ext]/[name]-[hash][extname]';
+          },
+        },
+      },
+    },
+    optimizeDeps: {
+      // Pre-bundle dependencies for faster dev startup
+      include: ['firebase/app', 'firebase/firestore', 'firebase/auth', 'firebase/messaging'],
     },
   };
 });

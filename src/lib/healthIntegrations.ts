@@ -62,13 +62,18 @@ export class GoogleFitProvider implements HealthDataProvider {
       const stored = localStorage.getItem('lifeos-storage');
       if (stored) {
         const data = JSON.parse(stored);
-        return !!data?.state?.isGoogleFitConnected;
+        const isConnected = !!data?.state?.isGoogleFitConnected;
+        console.log(`[GoogleFitProvider] Available: ${isConnected}`);
+        return isConnected;
       }
-    } catch {}
+    } catch (err) {
+      console.error('[GoogleFitProvider] Error checking availability:', err);
+    }
     return false;
   }
 
   async requestPermission(): Promise<boolean> {
+    console.log('[GoogleFitProvider] Requesting permission');
     // OAuth flow handled in Settings component
     return this.isAvailable();
   }
@@ -125,7 +130,7 @@ export class AppleHealthKitProvider implements HealthDataProvider {
     try {
       const result = await this.sendMessage('getSteps', { date });
       if (result) return { date, count: result.count, source: 'Apple Health' };
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -134,7 +139,7 @@ export class AppleHealthKitProvider implements HealthDataProvider {
     try {
       const result = await this.sendMessage('getSleep', { date });
       if (result) return { ...result, date, source: 'Apple Health' };
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -143,7 +148,7 @@ export class AppleHealthKitProvider implements HealthDataProvider {
     try {
       const result = await this.sendMessage('getHeartRate', { date });
       if (result) return { date, time: result.time, bpm: result.bpm, source: 'Apple Health' };
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -152,7 +157,7 @@ export class AppleHealthKitProvider implements HealthDataProvider {
     try {
       const result = await this.sendMessage('getWeight', { date });
       if (result) return { date, weightKg: result.weightKg, source: 'Apple Health' };
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -185,16 +190,25 @@ export class HealthConnectProvider implements HealthDataProvider {
 
   isAvailable(): boolean {
     // Check if running in a Capacitor/Android WebView with Health Connect bridge
-    return !!(window as any).HealthConnect;
+    const available = !!(window as any).HealthConnect;
+    console.log(`[HealthConnectProvider] Available: ${available}`);
+    return available;
   }
 
   async requestPermission(): Promise<boolean> {
-    if (!this.isAvailable()) return false;
+    if (!this.isAvailable()) {
+      console.warn('[HealthConnectProvider] Not available - skipping permission request');
+      return false;
+    }
     try {
-      return await (window as any).HealthConnect.requestPermission([
+      console.log('[HealthConnectProvider] Requesting permissions...');
+      const granted = await (window as any).HealthConnect.requestPermission([
         'Steps', 'HeartRate', 'SleepSession', 'Weight',
       ]);
-    } catch {
+      console.log(`[HealthConnectProvider] Permission granted: ${granted}`);
+      return granted;
+    } catch (err) {
+      console.error('[HealthConnectProvider] Permission request failed:', err);
       return false;
     }
   }
@@ -204,7 +218,7 @@ export class HealthConnectProvider implements HealthDataProvider {
     try {
       const result = await (window as any).HealthConnect.getSteps(date);
       if (result) return { date, count: result.count, source: 'Health Connect' };
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -213,7 +227,7 @@ export class HealthConnectProvider implements HealthDataProvider {
     try {
       const result = await (window as any).HealthConnect.getSleep(date);
       if (result) return { ...result, date, source: 'Health Connect' };
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -222,7 +236,7 @@ export class HealthConnectProvider implements HealthDataProvider {
     try {
       const result = await (window as any).HealthConnect.getHeartRate(date);
       if (result) return { date, time: result.time, bpm: result.bpm, source: 'Health Connect' };
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -231,7 +245,7 @@ export class HealthConnectProvider implements HealthDataProvider {
     try {
       const result = await (window as any).HealthConnect.getWeight(date);
       if (result) return { date, weightKg: result.weightKg, source: 'Health Connect' };
-    } catch {}
+    } catch { }
     return null;
   }
 }

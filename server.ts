@@ -38,10 +38,12 @@ const SCOPES = [
 
 // API Routes
 app.get("/api/auth/google/url", (req, res) => {
+  console.log('[Server] Google Fit auth URL requested');
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return res.status(400).json({ 
-      error: "MISSING_SECRETS", 
-      message: "กรุณาตั้งค่า GOOGLE_CLIENT_ID และ GOOGLE_CLIENT_SECRET ใน Settings > Secrets ของ AI Studio ก่อนครับ" 
+    console.error('[Server] MISSING_SECRETS: Google OAuth credentials not configured');
+    return res.status(400).json({
+      error: "MISSING_SECRETS",
+      message: "กรุณาตั้งค่า GOOGLE_CLIENT_ID และ GOOGLE_CLIENT_SECRET ใน Settings > Secrets ของ AI Studio ก่อนครับ"
     });
   }
   const url = oauth2Client.generateAuthUrl({
@@ -49,27 +51,30 @@ app.get("/api/auth/google/url", (req, res) => {
     scope: SCOPES,
     prompt: "consent",
   });
+  console.log('[Server] Generated OAuth URL successfully');
   res.json({ url });
 });
 
 app.get(["/auth/callback", "/auth/callback/"], async (req, res) => {
   const { code } = req.query;
+  console.log('[Server] OAuth callback received, code:', code ? 'present' : 'missing');
 
   try {
     const { tokens } = await oauth2Client.getToken(code as string);
-    
+    console.log('[Server] OAuth token exchange successful');
+
     // In a real app, we'd store these in a database linked to the user.
     // For this demo, we'll send them back to the client to store in IndexedDB.
     // Note: In production, NEVER send refresh tokens to the client.
-    
+
     res.send(`
       <html>
         <body>
           <script>
             if (window.opener) {
-              window.opener.postMessage({ 
-                type: 'GOOGLE_FIT_AUTH_SUCCESS', 
-                tokens: ${JSON.stringify(tokens)} 
+              window.opener.postMessage({
+                type: 'GOOGLE_FIT_AUTH_SUCCESS',
+                tokens: ${JSON.stringify(tokens)}
               }, '*');
               window.close();
             } else {
@@ -81,15 +86,37 @@ app.get(["/auth/callback", "/auth/callback/"], async (req, res) => {
       </html>
     `);
   } catch (error) {
-    console.error("Error exchanging code for tokens:", error);
-    res.status(500).send("Authentication failed");
+    console.error("[Server] Error exchanging code for tokens:", error);
+    res.send(`
+      <html>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'GOOGLE_FIT_AUTH_ERROR',
+                error: '${error instanceof Error ? error.message : 'Unknown error'}'
+              }, '*');
+              window.close();
+            } else {
+              window.location.href = '/';
+            }
+          </script>
+          <p>Authentication failed. This window should close automatically.</p>
+        </body>
+      </html>
+    `);
   }
 });
 
 // Proxy endpoint to refresh tokens or fetch data if needed server-side
 app.post("/api/auth/google/refresh", async (req, res) => {
   const { refresh_token } = req.body;
-  if (!refresh_token) return res.status(400).json({ error: "Missing refresh token" });
+  console.log('[Server] Token refresh requested');
+
+  if (!refresh_token) {
+    console.error('[Server] Missing refresh token');
+    return res.status(400).json({ error: "Missing refresh token" });
+  }
 
   try {
     const client = new OAuth2Client(
@@ -98,8 +125,10 @@ app.post("/api/auth/google/refresh", async (req, res) => {
     );
     client.setCredentials({ refresh_token });
     const { credentials } = await client.refreshAccessToken();
+    console.log('[Server] Token refresh successful');
     res.json(credentials);
   } catch (error) {
+    console.error('[Server] Failed to refresh token:', error);
     res.status(500).json({ error: "Failed to refresh token" });
   }
 });

@@ -22,7 +22,7 @@ interface SyncResult {
   errors: string[];
 }
 
-type SyncableCollectionName = 
+type SyncableCollectionName =
   | 'foodLogs' | 'waterLogs' | 'stepLogs' | 'sleepLogs'
   | 'vitals' | 'bodyMetrics' | 'habits' | 'habitCompletions'
   | 'fastingSessions' | 'workouts' | 'chatMessages';
@@ -59,6 +59,8 @@ async function syncCollection(
   const result: SyncResult = { pushed: 0, pulled: 0, conflicts: 0, errors: [] };
 
   try {
+    console.log(`[SyncEngine] Starting sync for ${collectionName} (user: ${uid})`);
+
     const table = db[collectionName] as Table<SyncableRecord & { id?: number; _firebaseId?: string }>;
 
     // 1. Get all LOCAL records with syncStatus = 'pending'
@@ -67,8 +69,11 @@ async function syncCollection(
       .equals('pending')
       .toArray();
 
+    console.log(`[SyncEngine] ${collectionName}: ${pendingLocal.length} pending local records`);
+
     // 2. Get ALL remote records for this user
     const remoteRecords = await firebaseService.getCollection<any>(collectionName, uid);
+    console.log(`[SyncEngine] ${collectionName}: ${remoteRecords.length} remote records`);
 
     // Build a map of remote records by _firebaseId for quick lookup
     const remoteMap = new Map<string, any>();
@@ -77,6 +82,7 @@ async function syncCollection(
     }
 
     // 3. PUSH: Send pending local records to Firebase
+    console.log(`[SyncEngine] ${collectionName}: Pushing ${pendingLocal.length} records`);
     for (const local of pendingLocal) {
       try {
         if (local._firebaseId) {
@@ -84,6 +90,7 @@ async function syncCollection(
           const remote = remoteMap.get(local._firebaseId);
           if (remote && remote.updatedAt > local.updatedAt) {
             // Remote is newer — pull remote version
+            console.log(`[SyncEngine] ${collectionName}: Conflict - remote is newer, pulling`);
             await table.update(local.id!, {
               ...remote,
               id: local.id,
@@ -119,7 +126,9 @@ async function syncCollection(
           result.pushed++;
         }
       } catch (err) {
-        result.errors.push(`Push error in ${collectionName}: ${err}`);
+        const errorMsg = `Push error in ${collectionName}: ${err}`;
+        console.error(`[SyncEngine] ${errorMsg}`, err);
+        result.errors.push(errorMsg);
       }
     }
 
@@ -131,6 +140,7 @@ async function syncCollection(
         .map(r => r._firebaseId!)
     );
 
+    console.log(`[SyncEngine] ${collectionName}: Pulling new remote records`);
     for (const remote of remoteRecords) {
       if (!localFirebaseIds.has(remote.id)) {
         // New remote record — pull to local
@@ -144,13 +154,19 @@ async function syncCollection(
           } as any);
           result.pulled++;
         } catch (err) {
-          result.errors.push(`Pull error in ${collectionName}: ${err}`);
+          const errorMsg = `Pull error in ${collectionName}: ${err}`;
+          console.error(`[SyncEngine] ${errorMsg}`, err);
+          result.errors.push(errorMsg);
         }
       }
     }
 
+    console.log(`[SyncEngine] ${collectionName} sync complete: ↑${result.pushed} ↓${result.pulled} ⚡${result.conflicts}`);
+
   } catch (err) {
-    result.errors.push(`Collection sync error (${collectionName}): ${err}`);
+    const errorMsg = `Collection sync error (${collectionName}): ${err}`;
+    console.error(`[SyncEngine] ${errorMsg}`, err);
+    result.errors.push(errorMsg);
   }
 
   return result;
