@@ -251,13 +251,16 @@ export const useAppStore = create<AppState>()(
                 try {
                   // Load profile from Firebase with timeout
                   const profilePromise = firebaseService.getUserProfile(fbUser.uid);
-                  const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Timeout fetching profile')), 10000)
-                  );
+                  let timeoutId: NodeJS.Timeout | number;
+                  const timeoutPromise = new Promise((_, reject) => {
+                    timeoutId = setTimeout(() => reject(new Error('Timeout fetching profile')), 10000);
+                  });
                   
                   const profile = await Promise.race([profilePromise, timeoutPromise]).catch(e => {
                     console.error("Failed to load user profile:", e);
                     return null;
+                  }).finally(() => {
+                    clearTimeout(timeoutId);
                   });
 
                   // Update with remote profile if available
