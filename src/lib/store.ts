@@ -222,54 +222,79 @@ export const useAppStore = create<AppState>()(
               }
             };
 
-            await syncData();
+            try {
+              await syncData();
 
-            // Register for push notifications
-            const { notifications } = get();
-            if (notifications.push) {
-              const token = await registerForPushNotifications();
-              if (token) set({ fcmToken: token });
-            }
+              // Register for push notifications
+              const { notifications } = get();
+              if (notifications.push) {
+                const token = await registerForPushNotifications();
+                if (token) set({ fcmToken: token });
+              }
 
-            // Load profile from Firebase
-            const profile = await firebaseService.getUserProfile(fbUser.uid);
-            if (profile) {
-              set({ user: profile as User, isLoaded: true });
-            } else {
-              const defaultUser: User = {
-                name: fbUser.displayName || 'ผู้ใช้งาน',
-                age: 31,
-                weight: 84,
-                height: 171,
-                gender: 'male',
-                targetWeight: 67,
-                dailyCalorieTarget: 2200,
-              };
-              await firebaseService.setUserProfile(fbUser.uid, defaultUser);
-              set({ user: defaultUser, isLoaded: true });
+              // Load profile from Firebase
+              const profile = await firebaseService.getUserProfile(fbUser.uid).catch(e => {
+                console.error("Failed to load user profile:", e);
+                return null;
+              });
+
+              if (profile) {
+                set({ user: profile as User, isLoaded: true });
+              } else {
+                const defaultUser: User = {
+                  name: fbUser.displayName || 'ผู้ใช้งาน',
+                  age: 31,
+                  weight: 84,
+                  height: 171,
+                  gender: 'male',
+                  targetWeight: 67,
+                  dailyCalorieTarget: 2200,
+                };
+                await firebaseService.setUserProfile(fbUser.uid, defaultUser).catch(e => console.error("Failed to create default user profile:", e));
+                set({ user: defaultUser, isLoaded: true });
+              }
+            } catch (error) {
+              console.error("Critical error during user load:", error);
+              // Fallback to local profile to unblock UI
+              const users = await db.users.toArray();
+              if (users.length > 0) {
+                set({ user: users[0], isLoaded: true });
+              } else {
+                set({ isLoaded: true }); // Prevent hanging infinitely
+              }
             }
           } else {
             set({ firebaseUser: null, isAuthReady: true });
             // Fallback to local user if not logged in
-            const users = await db.users.toArray();
-            if (users.length > 0) {
-              set({ user: users[0], isLoaded: true });
-            } else {
-              const defaultUser: User = {
-                name: 'ผู้ใช้งาน',
-                age: 31,
-                weight: 84,
-                height: 171,
-                gender: 'male',
-                targetWeight: 67,
-                dailyCalorieTarget: 2200,
-              };
-              const id = await db.users.add(defaultUser);
-              set({ user: { ...defaultUser, id }, isLoaded: true });
+            try {
+              const users = await db.users.toArray();
+              if (users.length > 0) {
+                set({ user: users[0], isLoaded: true });
+              } else {
+                const defaultUser: User = {
+                  name: 'ผู้ใช้งาน',
+                  age: 31,
+                  weight: 84,
+                  height: 171,
+                  gender: 'male',
+                  targetWeight: 67,
+                  dailyCalorieTarget: 2200,
+                };
+                const id = await db.users.add(defaultUser);
+                set({ user: { ...defaultUser, id }, isLoaded: true });
+              }
+            } catch (error) {
+              console.error("Local database error during user load:", error);
+              set({ isLoaded: true }); // Prevent UI from hanging
             }
           }
         });
-        await seedDatabase();
+        
+        try {
+          await seedDatabase();
+        } catch (e) {
+          console.error("Failed to seed database:", e);
+        }
       },
     }),
     {
