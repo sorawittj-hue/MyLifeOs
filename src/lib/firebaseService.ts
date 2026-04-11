@@ -47,7 +47,7 @@ interface FirestoreErrorInfo {
   }
 }
 
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null, shouldThrow: boolean = true): void {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -77,9 +77,11 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   });
 
-  // Throw a proper error with details
-  const errorMessage = `[${operationType}] ${errInfo.error} (User: ${errInfo.authInfo.userId || 'anonymous'}, Path: ${path || 'unknown'})`;
-  throw new Error(errorMessage);
+  // Throw a proper error with details if requested
+  if (shouldThrow) {
+    const errorMessage = `[${operationType}] ${errInfo.error} (User: ${errInfo.authInfo.userId || 'anonymous'}, Path: ${path || 'unknown'})`;
+    throw new Error(errorMessage);
+  }
 }
 
 export const firebaseService = {
@@ -143,7 +145,7 @@ export const firebaseService = {
       return data;
     } catch (error) {
       console.error(`[FirebaseService] Failed to get collection ${collectionName}:`, error);
-      handleFirestoreError(error, OperationType.LIST, path);
+      handleFirestoreError(error, OperationType.LIST, path, false);
       return [];
     }
   },
