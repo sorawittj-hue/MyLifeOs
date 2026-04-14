@@ -8,7 +8,7 @@ import { firebaseService } from './firebaseService';
 import { registerForPushNotifications } from './notifications';
 import { type RecoveryResult, type StrainResult, type SleepPerformanceResult, type HabitCorrelation, type AgenticIntervention } from './healthAlgorithms';
 
-export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings';
+export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings' | 'journal';
 
 // ── Default Dashboard Widgets ────────────────────────────────
 const DEFAULT_DASHBOARD_WIDGETS: DashboardWidget[] = [

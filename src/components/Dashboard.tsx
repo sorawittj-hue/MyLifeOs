@@ -481,26 +481,41 @@ export default function Dashboard() {
   };
 
   const item = {
-    hidden: { opacity: 0, y: 16 },
-    show: { opacity: 1, y: 0 }
+    hidden: { opacity: 0, y: 20, scale: 0.96 },
+    show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 110, damping: 16 } }
   };
 
-  // Loading skeleton
+  // Premium skeleton loader
   if (isLoading) {
+    const pulseConfig = {
+       initial: { opacity: 0.3 },
+       animate: { opacity: [0.3, 0.7, 0.3] },
+       transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' as const }
+    };
+    const skelBg = isDark ? 'bg-[#111111] border border-white/[0.02]' : 'bg-black/[0.02] border border-black/[0.02]';
+    
     return (
-      <div className="p-5 space-y-5 pb-32 max-w-2xl mx-auto">
+      <div className="p-5 space-y-6 pb-32 max-w-2xl mx-auto w-full">
         <div className="flex justify-between items-end px-1">
-          <div className="space-y-2">
-            <div className={`w-28 h-3 ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.04]'} rounded-full shimmer`} />
-            <div className={`w-44 h-7 ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.04]'} rounded-full shimmer`} />
+          <div className="space-y-3">
+            <motion.div {...pulseConfig} className={`w-24 h-3 ${skelBg} rounded-full`} />
+            <motion.div {...pulseConfig} transition={{...pulseConfig.transition, delay: 0.1}} className={`w-48 h-8 ${skelBg} rounded-full`} />
           </div>
-          <div className={`w-14 h-14 ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.04]'} rounded-[1.2rem] shimmer`} />
+          <motion.div {...pulseConfig} transition={{...pulseConfig.transition, delay: 0.2}} className={`w-14 h-14 ${skelBg} rounded-2xl`} />
         </div>
-        <div className={`w-full h-[220px] ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.04]'} rounded-[2rem] shimmer`} />
+
+        {/* Hero rings placeholder */}
+        <div className="flex gap-2 w-full h-[180px]">
+          {[1, 2, 3].map((i) => (
+             <motion.div key={i} {...pulseConfig} transition={{...pulseConfig.transition, delay: i * 0.15}} className={`flex-1 ${skelBg} rounded-[24px]`} />
+          ))}
+        </div>
+
+        {/* Grid placehodlers */}
         <div className="grid grid-cols-6 gap-3">
-          <div className={`col-span-6 h-20 ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.04]'} rounded-[1.75rem] shimmer`} />
-          <div className={`col-span-4 h-56 ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.04]'} rounded-[1.75rem] shimmer`} />
-          <div className={`col-span-2 h-56 ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.04]'} rounded-[1.75rem] shimmer`} />
+          <motion.div {...pulseConfig} transition={{...pulseConfig.transition, delay: 0.4}} className={`col-span-6 h-28 ${skelBg} rounded-[28px]`} />
+          <motion.div {...pulseConfig} transition={{...pulseConfig.transition, delay: 0.5}} className={`col-span-4 h-56 ${skelBg} rounded-[28px]`} />
+          <motion.div {...pulseConfig} transition={{...pulseConfig.transition, delay: 0.6}} className={`col-span-2 h-56 ${skelBg} rounded-[28px]`} />
         </div>
       </div>
     );
