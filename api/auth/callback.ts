@@ -40,10 +40,17 @@ export default async function handler(req, res) {
                 type: 'GOOGLE_FIT_AUTH_SUCCESS',
                 tokens: ${JSON.stringify(tokens)}
               }, '*');
-              window.close();
-            } else {
-              window.location.href = '/';
             }
+            
+            // Backup: save to localStorage for the main window to pick up
+            localStorage.setItem('google_fit_auth_temp', JSON.stringify({
+              timestamp: Date.now(),
+              tokens: ${JSON.stringify(tokens)}
+            }));
+            
+            setTimeout(() => {
+              window.close();
+            }, 500);
           </script>
           <p>Authentication successful. This window should close automatically.</p>
         </body>

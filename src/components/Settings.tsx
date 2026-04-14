@@ -85,8 +85,28 @@ export default function SettingsScreen() {
         alert('การเชื่อมต่อ Google Fit ล้มเหลว: ' + (event.data.error || 'Unknown error'));
       }
     };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'google_fit_auth_temp' && event.newValue) {
+        try {
+          const data = JSON.parse(event.newValue);
+          if (data.tokens) {
+            console.log('[Settings] Google Fit auth success via Storage, storing tokens');
+            setGoogleFitTokens(data.tokens);
+            localStorage.removeItem('google_fit_auth_temp');
+            sendNotification('เชื่อมต่อ Google Fit สำเร็จ!', { body: 'เชื่อมต่อผ่านระบบสำรองสำเร็จ! อย่าลืมเปิด Health Connect นะครับ' });
+          }
+        } catch (e) {
+          console.error('[Settings] Failed to parse storage tokens:', e);
+        }
+      }
+    };
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   const toggleNotification = async (key: keyof typeof notifications) => {
