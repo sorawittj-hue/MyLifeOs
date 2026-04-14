@@ -58,13 +58,19 @@ export async function fetchGoogleFitData(tokens: GoogleFitTokens, setTokens: (t:
   const sevenDaysAgo = subDays(startOfDay(new Date()), 7).getTime();
 
   try {
-    await Promise.all([
-      syncSteps(accessToken, sevenDaysAgo, now),
-      syncHeartRate(accessToken, sevenDaysAgo, now),
-      syncSleep(accessToken, sevenDaysAgo, now),
-    ]);
+    const syncTasks = [
+      { name: 'Steps', task: syncSteps(accessToken, sevenDaysAgo, now) },
+      { name: 'Heart Rate', task: syncHeartRate(accessToken, sevenDaysAgo, now) },
+      { name: 'Sleep', task: syncSleep(accessToken, sevenDaysAgo, now) },
+      { name: 'Blood Pressure', task: syncBloodPressure(accessToken, sevenDaysAgo, now) },
+      { name: 'Oxygen Saturation', task: syncOxygen(accessToken, sevenDaysAgo, now) },
+    ];
+
+    await Promise.all(syncTasks.map(t => t.task.catch(e => {
+      console.error(`Error syncing ${t.name}:`, e);
+    })));
   } catch (error) {
-    console.error('Error syncing Google Fit data:', error);
+    console.error('General sync error:', error);
   }
 }
 
@@ -151,6 +157,76 @@ async function syncSleep(accessToken: string, startTime: number, endTime: number
         quality: Math.min(Math.round(durationHours * 10), 100), // Mock quality based on duration
         source: 'google_fit'
       }) as SleepLog);
+    }
+  }
+}
+
+async function syncBloodPressure(accessToken: string, startTime: number, endTime: number) {
+  const response = await axios.post(
+    `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
+    {
+      aggregateBy: [{ dataTypeName: 'com.google.blood_pressure' }],
+      bucketByTime: { durationMillis: 3600000 },
+      startTimeMillis: startTime,
+      endTimeMillis: endTime,
+    },
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  for (const bucket of response.data.bucket) {
+    const points = bucket.dataset[0].point;
+    if (points.length > 0) {
+      const systolic = points[0].value[0].fpVal;
+      const diastolic = points[0].value[1].fpVal;
+      const date = format(new Date(parseInt(bucket.startTimeMillis)), 'yyyy-MM-dd');
+      const time = format(new Date(parseInt(bucket.startTimeMillis)), 'HH:mm');
+      
+      const existing = await db.vitals.where({ date, time, type: 'blood_pressure' }).first();
+      if (!existing) {
+        await db.vitals.add(withSyncMeta({
+          date,
+          time,
+          type: 'blood_pressure',
+          value1: Math.round(systolic),
+          value2: Math.round(diastolic),
+          unit: 'mmHg',
+          source: 'google_fit'
+        }) as Vital);
+      }
+    }
+  }
+}
+
+async function syncOxygen(accessToken: string, startTime: number, endTime: number) {
+  const response = await axios.post(
+    `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
+    {
+      aggregateBy: [{ dataTypeName: 'com.google.oxygen_saturation' }],
+      bucketByTime: { durationMillis: 3600000 },
+      startTimeMillis: startTime,
+      endTimeMillis: endTime,
+    },
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  for (const bucket of response.data.bucket) {
+    const points = bucket.dataset[0].point;
+    if (points.length > 0) {
+      const oxygen = points[0].value[0].fpVal;
+      const date = format(new Date(parseInt(bucket.startTimeMillis)), 'yyyy-MM-dd');
+      const time = format(new Date(parseInt(bucket.startTimeMillis)), 'HH:mm');
+      
+      const existing = await db.vitals.where({ date, time, type: 'oxygen' }).first();
+      if (!existing) {
+        await db.vitals.add(withSyncMeta({
+          date,
+          time,
+          type: 'oxygen',
+          value1: Math.round(oxygen),
+          unit: '%',
+          source: 'google_fit'
+        }) as Vital);
+      }
     }
   }
 }

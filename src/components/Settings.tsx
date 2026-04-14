@@ -78,7 +78,7 @@ export default function SettingsScreen() {
       if (event.data?.type === 'GOOGLE_FIT_AUTH_SUCCESS') {
         console.log('[Settings] Google Fit auth success, storing tokens');
         setGoogleFitTokens(event.data.tokens);
-        sendNotification('เชื่อมต่อ Google Fit สำเร็จ!', { body: 'ตอนนี้คุณสามารถซิงค์ข้อมูลจาก Samsung Health และนาฬิกาของคุณได้แล้ว' });
+        sendNotification('เชื่อมต่อ Google Fit สำเร็จ!', { body: 'เชื่อมต่อแล้ว! อย่าลืมเปิด Health Connect ในมือถือ Samsung ของคุณด้วยนะครับ' });
       } else if (event.data?.type === 'GOOGLE_FIT_AUTH_ERROR') {
         console.error('[Settings] Google Fit auth error:', event.data.error);
         alert('การเชื่อมต่อ Google Fit ล้มเหลว: ' + (event.data.error || 'Unknown error'));
@@ -399,7 +399,7 @@ export default function SettingsScreen() {
                 {isSyncing ? 'กำลังซิงค์ข้อมูล...' : 'ซิงค์ข้อมูลตอนนี้'}
               </button>
               <p className={`text-[10px] text-center mt-3 ${textMuted}`}>
-                *กรุณาซิงค์ข้อมูลจาก Samsung Health ผ่านแอป <b>Health Connect</b> ไปยัง Google Fit ก่อนกดซิงค์
+                *สำหรับผู้ใช้ <b>Samsung S23</b> และนาฬิกา <b>Aolon</b>: ต้องเปิดการซิงค์ในแอป <b>Health Connect</b> เพื่อดึงข้อมูลจาก Samsung Health มายัง Google Fit ก่อนครับ
               </p>
             </div>
           )}
