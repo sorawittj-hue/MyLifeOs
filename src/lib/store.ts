@@ -7,7 +7,7 @@ import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } fr
 import { firebaseService } from './firebaseService';
 import { syncAllCollections, getPendingSyncCount, getIsOnline } from './syncEngine';
 import { registerForPushNotifications } from './notifications';
-import { type RecoveryResult, type StrainResult, type HabitCorrelation } from './healthAlgorithms';
+import { type RecoveryResult, type StrainResult, type HabitCorrelation, type AgenticIntervention } from './healthAlgorithms';
 
 export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings';
 
@@ -29,6 +29,7 @@ export interface DailyMetrics {
   recovery: RecoveryResult | null;
   strain: StrainResult | null;
   habitCorrelations: HabitCorrelation[];
+  agenticInterventions?: AgenticIntervention[];
   aiInsight: string;
   lastUpdated: string; // yyyy-MM-dd
 }

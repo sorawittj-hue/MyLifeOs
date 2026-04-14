@@ -83,12 +83,13 @@ async function minimaxChat(
 export async function getAICoachResponse(prompt: string, context: AICoachContext): Promise<string> {
   try {
     const recoverySection = context.recovery
-      ? `RECOVERY SCORE: ${context.recovery.score}/100 (${context.recovery.label} — ${context.recovery.labelTh})
-         Breakdown: Sleep ${context.recovery.breakdown.sleep}pts | Quality ${context.recovery.breakdown.quality}pts | RHR ${context.recovery.breakdown.rhr}pts | HRV ${context.recovery.breakdown.hrv}pts`
+      ? `RECOVERY ZONE: ${context.recovery.score}/100 (${context.recovery.label} — ${context.recovery.labelTh})
+         Z-Scores (Std Dev from baseline): Sleep ${context.recovery.zScores.sleep}σ | RHR ${context.recovery.zScores.rhr}σ | HRV ${context.recovery.zScores.hrv}σ`
       : 'Recovery data: not available yet';
 
     const strainSection = context.strain
-      ? `STRAIN SCORE: ${context.strain.score}/21 (${context.strain.zone} — ${context.strain.zoneTh})`
+      ? `ALLOSTATIC LOAD: ${context.strain.totalAllostaticLoad}/21 (${context.strain.zone} — ${context.strain.zoneTh})
+         Breakdown: Physical Strain = ${context.strain.physicalScore}/21 | Cognitive/Mental Strain = ${context.strain.cognitiveScore}/21`
       : 'Strain data: not available yet';
 
     const habitSection = context.habitCorrelations && context.habitCorrelations.length > 0
@@ -112,15 +113,15 @@ RECENT VITALS:
 ${JSON.stringify(context.recentVitals.slice(0, 5), null, 2)}
 
 GUIDELINES:
-1. Proactively reference Recovery and Strain scores in your advice.
-2. If recovery < 50, strongly recommend reducing workout intensity today.
-3. If recovery > 70 and strain < 10, encourage higher intensity training.
-4. Reference specific habit correlations when relevant.
-5. Be concise, data-driven, and actionable — max 3 bullet points unless asked for more.
-6. Use Markdown for formatting (bold key numbers, use bullet lists).
+1. You now operate using advanced Z-Score baselines, Cognitive Strain, and Bayesian Predictive Habit Data.
+2. If Cognitive Strain > 10, strongly advise wind-down routines and highlight burnout risks independently of physical strain.
+3. If Total Allostatic Load > 16, enforce aggressive rest and block high-stress tasks.
+4. Reference specific Bayesian habit correlation predictions if the user asks about habits.
+5. Emphasize standard deviation (σ) impacts—e.g., "HRV drops -1.5σ means your nervous system is in fight-or-flight."
+6. Provide Agentic, actionable commands. Use Markdown for formatting.
 7. Always respond in Thai language (or English if user writes in English).
 
-GOAL: Help the user optimize their daily Recovery/Strain balance for long-term health.`;
+GOAL: Act as the ultimate predictive health analyst advising an elite performer.`;
 
     return await minimaxChat([
       { role: 'system', content: systemInstruction },

@@ -20,7 +20,8 @@ import { where, orderBy, limit } from 'firebase/firestore';
 import { StreakDashboard } from './StreakBadges';
 import {
   calculateRecoveryScore, calculateStrainScore, computeHabitCorrelations,
-  getRecoveryRecommendation, type RecoveryInput, type StrainInput, type DaySnapshot
+  getRecoveryRecommendation, generateAgenticInterventions,
+  type RecoveryInput, type StrainInput, type DaySnapshot, type CognitiveInput
 } from '../lib/healthAlgorithms';
 import { generateDailyInsight } from '../lib/gemini';
 import type { HabitCompletion, Habit, Workout } from '../lib/db';
@@ -164,35 +165,45 @@ function MetricRingCard({
 }
 
 // ── Habit Correlation Badge ───────────────────────────────────
-function CorrelationCard({ habit, isDark }: { habit: { habitName: string; recoveryImpactPct: number; color: string }; isDark: boolean }) {
+function CorrelationCard({ habit, isDark }: { habit: { habitName: string; recoveryImpactPct: number; color: string; predictiveInsight?: string }; isDark: boolean }) {
   const isPositive = habit.recoveryImpactPct >= 0;
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`flex items-center justify-between px-4 py-3 rounded-2xl ${
+      className={`flex flex-col px-4 py-3 rounded-2xl ${
         isDark ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-white border border-black/[0.04] shadow-sm'
       }`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+            style={{ backgroundColor: habit.color }}
+          />
+          <span className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+            {habit.habitName}
+          </span>
+        </div>
         <div
-          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: habit.color }}
-        />
-        <span className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-          {habit.habitName}
-        </span>
+          className={`flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-full`}
+          style={{
+            backgroundColor: isPositive ? '#22c55e20' : '#ef444420',
+            color: isPositive ? '#22c55e' : '#ef4444'
+          }}
+        >
+          {isPositive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+          {isPositive ? '+' : ''}{habit.recoveryImpactPct}% recovery
+        </div>
       </div>
-      <div
-        className={`flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-full`}
-        style={{
-          backgroundColor: isPositive ? '#22c55e20' : '#ef444420',
-          color: isPositive ? '#22c55e' : '#ef4444'
-        }}
-      >
-        {isPositive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-        {isPositive ? '+' : ''}{habit.recoveryImpactPct}% recovery
-      </div>
+      {habit.predictiveInsight && (
+         <div className={`mt-2.5 pt-2.5 border-t ${isDark ? 'border-white/5' : 'border-black/5'}`}>
+           <p className={`text-[11px] leading-relaxed font-semibold flex items-start gap-1.5 ${isDark ? 'text-zinc-400 text-violet-300' : 'text-zinc-600'}`}>
+              <Brain size={12} className="mt-0.5 shrink-0 text-violet-500" />
+              <span>{habit.predictiveInsight.replace(/\*\*/g, '')}</span>
+           </p>
+         </div>
+      )}
     </motion.div>
   );
 }
@@ -338,8 +349,15 @@ export default function Dashboard() {
       stepsCount,
     };
 
+    // Simulate Cognitive Input since there's no UI for it yet
+    const cognitiveInput: CognitiveInput = {
+       deepWorkMinutes: 100,
+       meetingHours: 2,
+       stressSelfReport: 5
+    };
+
     const recovery = calculateRecoveryScore(recoveryInput);
-    const strain = calculateStrainScore(strainInput);
+    const strain = calculateStrainScore(strainInput, cognitiveInput);
 
     // ── Habit correlations (last 14 days) ────────────────────
     const last14Days: DaySnapshot[] = [];
@@ -354,16 +372,25 @@ export default function Dashboard() {
         .filter(Boolean) as string[];
       // Simulate recovery for past days (not stored; use a decay from today)
       const dayRecovery = Math.max(20, Math.min(95, recovery.score + (Math.random() * 30 - 15)));
-      last14Days.push({ date: dateStr, habitsDone, recoveryScore: dayRecovery });
+      last14Days.push({ 
+        date: dateStr, 
+        habitsDone, 
+        recoveryScore: dayRecovery,
+         // Adding cognitive load context for Bayesian Engine
+         cognitiveStrain: Math.random() * 10
+      });
     }
 
     const habitColors: Record<string, string> = {};
     habits.forEach(h => { if (h.name) habitColors[h.name] = h.color; });
     const habitNames = habits.map(h => h.name).filter(Boolean) as string[];
     const habitCorrelations = computeHabitCorrelations(last14Days, habitNames, habitColors);
+    
+    // Agentic Interventions
+    const agenticInterventions = generateAgenticInterventions(recovery, strain);
 
     const metrics: DailyMetrics = {
-      recovery, strain, habitCorrelations,
+      recovery, strain, habitCorrelations, agenticInterventions,
       aiInsight: getRecoveryRecommendation(recovery, strain),
       lastUpdated: today,
     };
@@ -875,10 +902,10 @@ export default function Dashboard() {
           <MetricRingCard
             value={str?.score ?? 0}
             maxValue={21}
-            label="Strain"
+            label="Allostatic Load"
             labelTh={str?.zoneTh ?? 'คำนวณ...'}
             score={str?.score ?? 0}
-            zone={str?.zone ?? '--'}
+            zone={str ? `Physical ${str.physicalScore} / Cognitive ${str.cognitiveScore}` : '--'}
             gradientFrom={str?.gradientFrom ?? '#6b7280'}
             gradientTo={str?.gradientTo ?? '#9ca3af'}
             color={str?.color ?? '#6b7280'}
@@ -918,6 +945,32 @@ export default function Dashboard() {
           </motion.div>
         )}
 
+        {/* Agentic Core Interventions */}
+        {dailyMetrics?.agenticInterventions && dailyMetrics.agenticInterventions.length > 0 && (
+          <motion.div
+             initial={{ opacity: 0, y: 8 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ delay: 0.35 }}
+             className="space-y-2 pb-1"
+          >
+             {dailyMetrics.agenticInterventions.map((intervention, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => { haptics.light(); navigate('/coach'); }}
+                  className={`p-3.5 rounded-2xl flex items-start gap-3 cursor-pointer group border ${
+                    isDark ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/20 text-white' : 'bg-red-50 border-red-200 hover:bg-red-100 text-zinc-900'
+                  }`}
+                >
+                  <AlertCircle className={`mt-0.5 shrink-0 animate-pulse ${isDark ? 'text-red-400' : 'text-red-500'}`} size={16} />
+                  <div>
+                     <p className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${isDark ? 'text-red-400' : 'text-red-600'}`}>Agent Action Required</p>
+                     <p className={`text-xs font-semibold leading-relaxed ${isDark ? 'text-red-100' : 'text-red-900'}`}>{intervention.uiPrompt}</p>
+                  </div>
+                </div>
+             ))}
+          </motion.div>
+        )}
+
         {/* Recovery breakdown bar */}
         {rec && !isMetricsLoading && (
           <motion.div
@@ -928,29 +981,32 @@ export default function Dashboard() {
               isDark ? 'bg-white/[0.03] border border-white/[0.05]' : 'bg-black/[0.02] border border-black/[0.04]'
             }`}
           >
-            <p className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Recovery Breakdown</p>
+            <p className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Recovery Breakdown (Z-Scores)</p>
             {[
-              { label: 'Sleep Duration', pts: rec.breakdown.sleep, max: 40, color: '#6366f1' },
-              { label: 'Sleep Quality', pts: rec.breakdown.quality, max: 25, color: '#8b5cf6' },
-              { label: 'Resting HR', pts: rec.breakdown.rhr, max: 20, color: '#ec4899' },
-              { label: 'HRV', pts: rec.breakdown.hrv, max: 15, color: '#14b8a6' },
-            ].map((item) => (
+              { label: 'Sleep Deprivation', pts: rec.zScores.sleep, min: -3, max: 3, color: '#6366f1' },
+              { label: 'Nervous System (HRV)', pts: rec.zScores.hrv, min: -3, max: 3, color: '#14b8a6' },
+              { label: 'Cardiac Stress (RHR)', pts: rec.zScores.rhr, min: -3, max: 3, color: '#ec4899' },
+            ].map((item) => {
+              const progress = Math.min(Math.max(((item.pts - item.min) / (item.max - item.min)) * 100, 0), 100);
+              return (
               <div key={item.label} className="space-y-1">
                 <div className="flex justify-between text-[10px]">
                   <span className={textMuted}>{item.label}</span>
-                  <span className="font-bold" style={{ color: item.color }}>{item.pts}/{item.max}</span>
+                  <span className="font-bold" style={{ color: item.color }}>{item.pts > 0 ? '+' : ''}{item.pts}σ</span>
                 </div>
-                <div className={`h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-white/[0.05]' : 'bg-black/[0.05]'}`}>
+                <div className={`h-1.5 rounded-full overflow-hidden relative ${isDark ? 'bg-white/[0.05]' : 'bg-black/[0.05]'}`}>
+                  <div className={`absolute top-0 bottom-0 w-0.5 bg-red-500/50 left-[50%] z-10`} />
                   <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(item.pts / item.max) * 100}%` }}
+                    initial={{ width: '50%' }}
+                    animate={{ width: `${progress}%` }}
                     transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.5 }}
                     className="h-full rounded-full"
                     style={{ backgroundColor: item.color }}
                   />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </motion.div>
         )}
 
