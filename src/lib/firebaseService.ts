@@ -129,14 +129,25 @@ export const firebaseService = {
   subscribeToCollection<T>(
     collectionName: string,
     uid: string,
-    queryConstraints: QueryConstraint[],
-    callback: (data: T[]) => void,
+    queryConstraintsOrCallback: QueryConstraint[] | ((data: T[]) => void),
+    callbackOrUndefined?: (data: T[]) => void,
   ): () => void {
+    // Support both 3-arg (name, uid, callback) and 4-arg (name, uid, constraints, callback) signatures
+    let constraints: QueryConstraint[];
+    let callback: (data: T[]) => void;
+    if (typeof queryConstraintsOrCallback === 'function') {
+      constraints = [];
+      callback = queryConstraintsOrCallback;
+    } else {
+      constraints = queryConstraintsOrCallback || [];
+      callback = callbackOrUndefined!;
+    }
+
     console.log(`[FirebaseService] Subscribing to ${collectionName} for user ${uid}`);
     const q = query(
       collection(db, collectionName),
       where('uid', '==', uid),
-      ...queryConstraints,
+      ...constraints,
     );
 
     const unsubscribe = onSnapshot(

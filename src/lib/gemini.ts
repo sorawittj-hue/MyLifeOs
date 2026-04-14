@@ -39,12 +39,14 @@ async function minimaxChat(
       const data = await proxyRes.json();
       return data.content || 'ไม่มีเนื้อหา';
     }
-    if (proxyRes.status !== 404) {
+    if (proxyRes.status === 429) {
+      console.warn('[AI] Proxy rate-limited (429) — falling back to direct MiniMax call');
+    } else if (proxyRes.status === 404) {
+      console.warn('[AI] Proxy 404 — falling back to direct MiniMax call');
+    } else {
       const err = await proxyRes.text();
       throw new Error(`Proxy error ${proxyRes.status}: ${err}`);
     }
-    // 404 = server not restarted yet → fall through to direct call
-    console.warn('[AI] Proxy 404 — falling back to direct MiniMax call');
   } catch (e: any) {
     if (!e.message?.includes('Proxy error')) {
       console.warn('[AI] Proxy unreachable — falling back to direct call', e.message);
