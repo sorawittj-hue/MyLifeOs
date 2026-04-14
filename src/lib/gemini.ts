@@ -57,6 +57,7 @@ async function minimaxChat(
 
   // 2. Direct call fallback (tries models in order)
   let lastErr = '';
+  let status = 0;
   for (const model of MINIMAX_MODELS) {
     try {
       const res = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
@@ -71,12 +72,18 @@ async function minimaxChat(
         const data = await res.json();
         return data.choices?.[0]?.message?.content || 'ไม่มีเนื้อหา';
       }
+      status = res.status;
       lastErr = `${res.status} ${res.statusText}`;
-      if (res.status === 401 || res.status === 403) break;
+      if (res.status === 401 || res.status === 403 || res.status === 429) break;
     } catch (e: any) {
       lastErr = e.message;
     }
   }
+  
+  if (status === 429 || lastErr.includes('429')) {
+    return 'พักหน่อยนะครับ 🌿 โค้ช AI ตอนนี้มีคนใช้งานเต็มระบบหรือโควตาเต็ม กรุณาลองใหม่ในภายหลังครับ';
+  }
+  
   throw new Error(`MiniMax all models failed: ${lastErr}`);
 }
 

@@ -22,6 +22,23 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
+
+    const errMessage = (error.message || '').toLowerCase();
+    
+    // Auto-reload on chunk load error (common when a new deployment happens while user has app open)
+    if (errMessage.includes('failed to fetch dynamically imported module') ||
+        errMessage.includes('importing a module script failed') ||
+        errMessage.includes('unexpected token')) { // sometimes it loads index.html instead of JS
+        
+      const isRetrying = sessionStorage.getItem('chunk-load-retry');
+      if (!isRetrying) {
+        sessionStorage.setItem('chunk-load-retry', 'true');
+        console.warn('Chunk load error detected. Forcing page reload to fetch new bundles...');
+        window.location.reload();
+      } else {
+        sessionStorage.removeItem('chunk-load-retry');
+      }
+    }
   }
 
   render() {
