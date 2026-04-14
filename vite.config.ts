@@ -41,6 +41,7 @@ export default defineConfig(async ({ mode }) => {
               },
             },
           ],
+          navigateFallbackDenylist: [/^\/api/, /^\/auth\/callback/],
         },
         manifest: {
           name: 'LifeOS Health Suite',

@@ -168,6 +168,7 @@ export default function App() {
               <Route path="/sleep" element={<ErrorBoundary><SleepTracker /></ErrorBoundary>} />
               <Route path="/settings" element={<ErrorBoundary><SettingsScreen /></ErrorBoundary>} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/api/auth/callback" element={<AuthCallback />} />
             </Routes>
           </Suspense>
         </AnimatePresence>
