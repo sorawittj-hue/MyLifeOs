@@ -242,7 +242,7 @@ export default function Dashboard() {
     if (activeTab === 'dashboard') {
       loadDashboardData();
     }
-  }, [firebaseUser, activeTab]);
+  }, [firebaseUser?.uid, activeTab]);
 
   // Defer chart mount until container has real pixel size
   // chartReady is set via double-rAF inside loadDashboardData after data loads
