@@ -115,19 +115,43 @@ export const firebaseService = {
   },
 
   // Generic Collection Methods
-  subscribeToCollection<T>(collectionName: string, uid: string, callback: (data: T[]) => void) {
-    const path = collectionName;
-    console.log(`[FirebaseService] Subscribing to ${collectionName} for user ${uid}`);
-    const q = query(collection(db, collectionName), where("uid", "==", uid));
 
-    return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
-      console.log(`[FirebaseService] ${collectionName} snapshot: ${data.length} documents`);
-      callback(data);
-    }, (error) => {
-      console.error(`[FirebaseService] Subscription error for ${collectionName}:`, error);
-      handleFirestoreError(error, OperationType.LIST, path);
-    });
+  /**
+   * Subscribe to a Firestore collection with optional query constraints.
+   * Returns an `unsubscribe` function — call it inside a useEffect cleanup.
+   *
+   * @example
+   * const unsub = firebaseService.subscribeToCollection<FoodLog>(
+   *   'foodLogs', uid, [where('date','==',today)], (docs) => setFoods(docs)
+   * );
+   * return () => unsub();
+   */
+  subscribeToCollection<T>(
+    collectionName: string,
+    uid: string,
+    queryConstraints: QueryConstraint[],
+    callback: (data: T[]) => void,
+  ): () => void {
+    console.log(`[FirebaseService] Subscribing to ${collectionName} for user ${uid}`);
+    const q = query(
+      collection(db, collectionName),
+      where('uid', '==', uid),
+      ...queryConstraints,
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as T));
+        callback(data);
+      },
+      (error) => {
+        console.error(`[FirebaseService] Subscription error for ${collectionName}:`, error);
+        handleFirestoreError(error, OperationType.LIST, collectionName, false);
+      },
+    );
+
+    return unsubscribe;
   },
 
   async getCollection<T>(collectionName: string, uid: string, queryConstraints: QueryConstraint[] = []): Promise<T[]> {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Activity, Flame, Droplets, Timer, TrendingDown, Target, Zap, Heart, Moon,
   Wind, Bot, Cloud, CloudOff, Sparkles, ArrowUpRight, GripVertical, Eye, EyeOff,
@@ -213,14 +213,27 @@ export default function Dashboard() {
   const {
     user, theme, activeTab, setActiveTab, isGoogleFitConnected, firebaseUser,
     dashboardWidgets, reorderDashboardWidget, toggleDashboardWidget,
-    isOnline, pendingSyncCount, syncStatus, triggerSync,
+    isOnline,
     dailyMetrics, setDailyMetrics
   } = useAppStore();
   const navigate = useNavigate();
-  const aiCalledRef = React.useRef<string>(''); // tracks date AI was last called — prevents StrictMode double-fire
+  const aiCalledRef = useRef<string>(''); // tracks date AI was last called
   const [isLoading, setIsLoading] = useState(true);
   const [isMetricsLoading, setIsMetricsLoading] = useState(true);
   const [chartReady, setChartReady] = useState(false);
+
+  // ── Raw data atoms (populated by onSnapshot listeners) ────────────
+  const [foods, setFoods] = useState<FoodLog[]>([]);
+  const [water, setWater] = useState<WaterLog[]>([]);
+  const [weights, setWeights] = useState<BodyMetric[]>([]);
+  const [sleepLog, setSleepLog] = useState<SleepLog | undefined>(undefined);
+  const [vitals, setVitals] = useState<Vital[]>([]);
+  const [stepLog, setStepLog] = useState<StepLog | undefined>(undefined);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [completions, setCompletions] = useState<HabitCompletion[]>([]);
+  const [activeFasting, setActiveFasting] = useState<FastingSession | undefined>(undefined);
+
   const [stats, setStats] = useState({
     calories: 0,
     water: 0,
@@ -237,48 +250,75 @@ export default function Dashboard() {
   const [showCustomize, setShowCustomize] = useState(false);
   const isDark = theme === 'dark';
   const timeOfDay = getTimeOfDay();
+  const today = format(new Date(), 'yyyy-MM-dd');
 
+  // ── Firebase real-time subscriptions (authenticated users only) ────
   useEffect(() => {
-    if (activeTab === 'dashboard') {
-      loadDashboardData();
-    }
-  }, [firebaseUser?.uid, activeTab]);
+    if (!firebaseUser || activeTab !== 'dashboard') return;
+    const uid = firebaseUser.uid;
 
-  // Defer chart mount until container has real pixel size
-  // chartReady is set via double-rAF inside loadDashboardData after data loads
-
-  const loadDashboardData = async () => {
     setIsLoading(true);
     setIsMetricsLoading(true);
-    setChartReady(false); // reset chart until DOM has real dimensions
-    const today = format(new Date(), 'yyyy-MM-dd');
-    let foods: FoodLog[] = [];
-    let water: WaterLog[] = [];
-    let weights: BodyMetric[] = [];
-    let sleep: SleepLog | undefined;
-    let vitals: Vital[] = [];
-    let steps: StepLog | undefined;
-    let workouts: Workout[] = [];
-    let habits: Habit[] = [];
-    let completions: HabitCompletion[] = [];
+    setChartReady(false);
 
-    if (firebaseUser) {
-      const [foodData, waterData, weightData, sleepData, vitalData, stepData, workoutData, habitData, completionData] = await Promise.all([
-        firebaseService.getCollection<FoodLog>('foodLogs', firebaseUser.uid, [where('date', '==', today)]),
-        firebaseService.getCollection<WaterLog>('waterLogs', firebaseUser.uid, [where('date', '==', today)]),
-        firebaseService.getCollection<BodyMetric>('bodyMetrics', firebaseUser.uid, [orderBy('date', 'desc'), limit(7)]),
-        firebaseService.getCollection<SleepLog>('sleepLogs', firebaseUser.uid, [where('date', '==', today), limit(1)]),
-        firebaseService.getCollection<Vital>('vitals', firebaseUser.uid, [where('date', '==', today)]),
-        firebaseService.getCollection<StepLog>('stepLogs', firebaseUser.uid, [where('date', '==', today), limit(1)]),
-        firebaseService.getCollection<Workout>('workouts', firebaseUser.uid, [where('date', '==', today)]),
-        firebaseService.getCollection<Habit>('habits', firebaseUser.uid),
-        firebaseService.getCollection<HabitCompletion>('habitCompletions', firebaseUser.uid),
-      ]);
-      foods = foodData; water = waterData; weights = weightData.reverse();
-      sleep = sleepData[0]; vitals = vitalData; steps = stepData[0];
-      workouts = workoutData; habits = habitData; completions = completionData;
-    } else {
-      [foods, water, weights, vitals, workouts, habits, completions] = await Promise.all([
+    const unsubscribers: Array<() => void> = [
+      firebaseService.subscribeToCollection<FoodLog>(
+        'foodLogs', uid, [where('date', '==', today)],
+        (docs) => setFoods(docs),
+      ),
+      firebaseService.subscribeToCollection<WaterLog>(
+        'waterLogs', uid, [where('date', '==', today)],
+        (docs) => setWater(docs),
+      ),
+      firebaseService.subscribeToCollection<BodyMetric>(
+        'bodyMetrics', uid, [orderBy('date', 'desc'), limit(7)],
+        (docs) => setWeights([...docs].reverse()),
+      ),
+      firebaseService.subscribeToCollection<SleepLog>(
+        'sleepLogs', uid, [where('date', '==', today), limit(1)],
+        (docs) => setSleepLog(docs[0]),
+      ),
+      firebaseService.subscribeToCollection<Vital>(
+        'vitals', uid, [where('date', '==', today)],
+        (docs) => setVitals(docs),
+      ),
+      firebaseService.subscribeToCollection<StepLog>(
+        'stepLogs', uid, [where('date', '==', today), limit(1)],
+        (docs) => setStepLog(docs[0]),
+      ),
+      firebaseService.subscribeToCollection<Workout>(
+        'workouts', uid, [where('date', '==', today)],
+        (docs) => setWorkouts(docs),
+      ),
+      firebaseService.subscribeToCollection<Habit>(
+        'habits', uid, [],
+        (docs) => setHabits(docs),
+      ),
+      firebaseService.subscribeToCollection<HabitCompletion>(
+        'habitCompletions', uid, [],
+        (docs) => setCompletions(docs),
+      ),
+      firebaseService.subscribeToCollection<FastingSession>(
+        'fastingSessions', uid, [],
+        (docs) => setActiveFasting(docs.find(s => s.completed === 0)),
+      ),
+    ];
+
+    // Unsubscribe all listeners on cleanup
+    return () => unsubscribers.forEach(unsub => unsub());
+  // Re-subscribe only when uid or the current date changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firebaseUser?.uid, activeTab, today]);
+
+  // ── Dexie fallback for guest (unauthenticated) users ────────────
+  useEffect(() => {
+    if (firebaseUser || activeTab !== 'dashboard') return;
+    let cancelled = false;
+
+    const loadLocal = async () => {
+      setIsLoading(true);
+      setIsMetricsLoading(true);
+      const [f, w, wts, vt, wk, hb, cp] = await Promise.all([
         db.foodLogs.where('date').equals(today).toArray(),
         db.waterLogs.where('date').equals(today).toArray(),
         db.bodyMetrics.orderBy('date').limit(7).toArray(),
@@ -287,36 +327,39 @@ export default function Dashboard() {
         db.habits.toArray(),
         db.habitCompletions.toArray(),
       ]);
-      sleep = await db.sleepLogs.where('date').equals(today).first();
-      steps = await db.stepLogs.where('date').equals(today).first();
-    }
+      const sl = await db.sleepLogs.where('date').equals(today).first();
+      const st = await db.stepLogs.where('date').equals(today).first();
+      const fa = await db.fastingSessions.where('completed').equals(0).first();
+      if (cancelled) return;
+      setFoods(f); setWater(w); setWeights([...wts].reverse());
+      setSleepLog(sl); setVitals(vt); setStepLog(st);
+      setWorkouts(wk); setHabits(hb); setCompletions(cp);
+      setActiveFasting(fa);
+    };
 
-    // ── Calculate sleep hours ─────────────────────────────────
+    loadLocal();
+    return () => { cancelled = true; };
+  }, [firebaseUser, activeTab, today]);
+
+  // ── Derive stats & health metrics from raw atoms ───────────────
+  useEffect(() => {
+    // ── Sleep hours ────────────────────────────────────────
     let sleepHours = 0;
     let sleepQuality = 3;
-    if (sleep) {
+    if (sleepLog) {
       try {
-        const bed = parse(sleep.bedtime, 'HH:mm', new Date());
-        let wake = parse(sleep.wakeTime, 'HH:mm', new Date());
+        const bed = parse(sleepLog.bedtime, 'HH:mm', new Date());
+        let wake = parse(sleepLog.wakeTime, 'HH:mm', new Date());
         if (wake < bed) wake = new Date(wake.getTime() + 24 * 60 * 60 * 1000);
         sleepHours = differenceInMinutes(wake, bed) / 60;
-        sleepQuality = sleep.quality || 3;
+        sleepQuality = sleepLog.quality || 3;
       } catch (e) { console.error('Sleep calc error:', e); }
     }
 
-    // ── Active fasting ────────────────────────────────────────
-    let activeFasting: FastingSession | undefined;
-    if (firebaseUser) {
-      const fastingData = await firebaseService.getCollection<FastingSession>('fastingSessions', firebaseUser.uid);
-      activeFasting = fastingData.find(s => s.completed === 0);
-    } else {
-      activeFasting = await db.fastingSessions.where('completed').equals(0).first();
-    }
-
     const heartRate = vitals.find(v => v.type === 'heart_rate')?.value1 || 72;
-    const stepsCount = steps?.count || 0;
+    const stepsCount = stepLog?.count || 0;
 
-    const currentStats = {
+    setStats({
       calories: foods.reduce((s, f) => s + f.calories, 0),
       water: water.reduce((s, w) => s + w.amountMl, 0),
       fasting: 0,
@@ -327,57 +370,50 @@ export default function Dashboard() {
       heartRate,
       steps: stepsCount,
       fastingProtocol: activeFasting?.protocol || '--',
-      isFasting: !!activeFasting
-    };
+      isFasting: !!activeFasting,
+    });
 
-    setStats(currentStats);
     setIsLoading(false);
-    // Two rAFs = browser completes layout before Recharts measures container
     requestAnimationFrame(() => requestAnimationFrame(() => setChartReady(true)));
 
-    // ── Compute Recovery & Strain ─────────────────────────────
+    // ── Recovery & Strain ──────────────────────────────────
     const recoveryInput: RecoveryInput = {
       sleepDurationHours: sleepHours,
       sleepQuality,
       restingHeartRate: heartRate,
       hrv: null,
     };
-
     const strainInput: StrainInput = {
       workoutDurationMinutes: workouts.reduce((s, w) => s + (w.duration || 0), 0),
       workoutNames: workouts.map(w => w.name),
       stepsCount,
     };
-
-    // Simulate Cognitive Input since there's no UI for it yet
     const cognitiveInput: CognitiveInput = {
-       deepWorkMinutes: 100,
-       meetingHours: 2,
-       stressSelfReport: 5
+      deepWorkMinutes: 100,
+      meetingHours: 2,
+      stressSelfReport: 5,
     };
 
     const recovery = calculateRecoveryScore(recoveryInput);
     const strain = calculateStrainScore(strainInput, cognitiveInput);
 
-    // ── Habit correlations (last 14 days) ────────────────────
+    // ── Habit correlations (last 14 days) ──────────────────────
     const last14Days: DaySnapshot[] = [];
-    const today14 = new Date();
+    const todayDate = new Date();
     for (let i = 13; i >= 0; i--) {
-      const d = new Date(today14);
+      const d = new Date(todayDate);
       d.setDate(d.getDate() - i);
       const dateStr = format(d, 'yyyy-MM-dd');
       const dayCompletions = completions.filter(c => c.date === dateStr);
       const habitsDone = dayCompletions
         .map(c => habits.find(h => h.id === c.habitId || String(h.id) === String(c.habitId))?.name)
         .filter(Boolean) as string[];
-      // Simulate recovery for past days (not stored; use a decay from today)
       const dayRecovery = Math.max(20, Math.min(95, recovery.score + (Math.random() * 30 - 15)));
-      last14Days.push({ 
-        date: dateStr, 
-        habitsDone, 
+      last14Days.push({
+        date: dateStr,
+        habitsDone,
         recoveryScore: dayRecovery,
-         // Adding cognitive load context for Bayesian Engine
-         cognitiveStrain: Math.random() * 10
+        cognitiveStrain: Math.random() * 10,
       });
     }
 
@@ -385,8 +421,6 @@ export default function Dashboard() {
     habits.forEach(h => { if (h.name) habitColors[h.name] = h.color; });
     const habitNames = habits.map(h => h.name).filter(Boolean) as string[];
     const habitCorrelations = computeHabitCorrelations(last14Days, habitNames, habitColors);
-    
-    // Agentic Interventions
     const agenticInterventions = generateAgenticInterventions(recovery, strain);
 
     const metrics: DailyMetrics = {
@@ -397,21 +431,20 @@ export default function Dashboard() {
     setDailyMetrics(metrics);
     setIsMetricsLoading(false);
 
-    // ── AI Insight (async, non-blocking, rate-limited) ───────
-    // Guard: only call API once per day — prevents React StrictMode double-fire (429)
+    // ── AI Insight (rate-limited, non-blocking) ─────────────────
     if (aiCalledRef.current !== today) {
       aiCalledRef.current = today;
-      const aiInsightPromise = generateDailyInsight({
+      generateDailyInsight({
         recovery, strain,
         sleepHours, steps: stepsCount,
         calories: foods.reduce((s, f) => s + f.calories, 0),
         habitCorrelations,
-      });
-      aiInsightPromise.then(aiInsight => {
+      }).then(aiInsight => {
         setDailyMetrics({ ...metrics, aiInsight });
       }).catch(() => {});
     }
-  }; // end loadDashboardData
+  }, [foods, water, weights, sleepLog, vitals, stepLog, workouts, habits, completions, activeFasting]);
+
 
   const healthScore = Math.round(
     ((Math.min(stats.calories / (user?.dailyCalorieTarget || 2200), 1) * 30) +
@@ -849,25 +882,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* ── Sync status ───────────────────────────────────────── */}
-      {pendingSyncCount > 0 && firebaseUser && (
-        <motion.button
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          onClick={() => triggerSync()}
-          className={`w-full py-2 px-4 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all ${
-            syncStatus === 'syncing'
-              ? 'bg-blue-500/10 text-blue-400'
-              : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
-          }`}
-        >
-          {syncStatus === 'syncing' ? (
-            <><div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /> กำลังซิงค์...</>
-          ) : (
-            <><Cloud size={14} /> {pendingSyncCount} รายการรอซิงค์ — แตะเพื่อซิงค์</>
-          )}
-        </motion.button>
-      )}
+      {/* ── Sync status — handled automatically by Firebase Offline Persistence ── */}
 
       {/* ══════════════════════════════════════════════════════
            WHOOP-STYLE RECOVERY + STRAIN HERO PANEL

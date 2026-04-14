@@ -1,11 +1,22 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getMessaging, isSupported } from "firebase/messaging";
 import firebaseConfig from "../../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// ── Firestore with Offline Persistence ──────────────────────
+// Uses IndexedDB under the hood — works across multiple tabs.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+});
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 

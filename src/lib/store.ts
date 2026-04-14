@@ -5,7 +5,6 @@ import { seedDatabase } from './seed';
 import { auth, googleProvider } from './firebase';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { firebaseService } from './firebaseService';
-import { syncAllCollections, getPendingSyncCount, getIsOnline } from './syncEngine';
 import { registerForPushNotifications } from './notifications';
 import { type RecoveryResult, type StrainResult, type HabitCorrelation, type AgenticIntervention } from './healthAlgorithms';
 
@@ -52,9 +51,7 @@ interface AppState {
   googleFitTokens: any | null;
   isGoogleFitConnected: boolean;
   demoMode: boolean;
-  // Sync state
-  syncStatus: 'idle' | 'syncing' | 'error';
-  pendingSyncCount: number;
+  // Connection state (UI indicator only — no manual sync needed)
   isOnline: boolean;
   // Dashboard layout
   dashboardWidgets: DashboardWidget[];
@@ -75,7 +72,6 @@ interface AppState {
   reorderDashboardWidget: (fromIndex: number, toIndex: number) => void;
   toggleDashboardWidget: (widgetId: string) => void;
   setDailyMetrics: (metrics: DailyMetrics) => void;
-  triggerSync: () => Promise<void>;
   loadUser: () => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
@@ -95,8 +91,6 @@ export const useAppStore = create<AppState>()(
       googleFitTokens: null,
       isGoogleFitConnected: false,
       demoMode: false,
-      syncStatus: 'idle',
-      pendingSyncCount: 0,
       isOnline: navigator.onLine,
       dashboardWidgets: DEFAULT_DASHBOARD_WIDGETS,
       fcmToken: null,
@@ -152,39 +146,9 @@ export const useAppStore = create<AppState>()(
 
       setDailyMetrics: (metrics) => set({ dailyMetrics: metrics }),
 
-      // ── Sync Operations ────────────────────────────────────
-      triggerSync: async () => {
-        const { firebaseUser } = get();
-        if (!firebaseUser) {
-          console.warn('[Store] Cannot sync: User not authenticated');
-          return;
-        }
-
-        console.log('[Store] Triggering sync for user:', firebaseUser.uid);
-        set({ syncStatus: 'syncing' });
-
-        try {
-          const result = await syncAllCollections(firebaseUser.uid);
-          const pending = await getPendingSyncCount();
-
-          if (result.errors.length > 0) {
-            console.error('[Store] Sync completed with errors:', result.errors);
-            set({
-              syncStatus: 'error',
-              pendingSyncCount: pending
-            });
-          } else {
-            console.log(`[Store] Sync successful: ↑${result.pushed} ↓${result.pulled} ⚡${result.conflicts}`);
-            set({
-              syncStatus: 'idle',
-              pendingSyncCount: pending
-            });
-          }
-        } catch (error) {
-          console.error('[Store] Sync failed:', error);
-          set({ syncStatus: 'error' });
-        }
-      },
+      // ── Sync Operations (deprecated — Firebase Offline Persistence handles this) ──
+      // triggerSync kept as no-op for any remaining call-sites
+      // triggerSync: async () => {},
 
       login: async () => {
         console.log('[Store] Initiating Google login...');
@@ -227,28 +191,12 @@ export const useAppStore = create<AppState>()(
       loadUser: async () => {
         console.log('[Store] Loading user data...');
 
-        // Monitor online status
+        // Monitor online status (UI indicator only)
         const updateOnlineStatus = () => {
           const online = navigator.onLine;
           console.log(`[Store] Online status changed: ${online}`);
           set({ isOnline: online });
-
-          // Auto-sync when coming back online
-          if (online) {
-            const { firebaseUser } = get();
-            if (firebaseUser) {
-              console.log('[Store] Back online - triggering sync');
-              syncAllCollections(firebaseUser.uid).then(async result => {
-                const pending = await getPendingSyncCount();
-                set({
-                  pendingSyncCount: pending,
-                  syncStatus: result.errors.length > 0 ? 'error' : 'idle'
-                });
-              }).catch(err => {
-                console.error('[Store] Auto-sync failed:', err);
-              });
-            }
-          }
+          // Firebase Offline Persistence automatically re-syncs when back online
         };
 
         window.addEventListener('online', updateOnlineStatus);
@@ -261,54 +209,8 @@ export const useAppStore = create<AppState>()(
           if (fbUser) {
             set({ firebaseUser: fbUser, isAuthReady: true });
 
-            // Sync local data to Firebase with better error handling
-            const syncData = async () => {
-              console.log('[Store] Starting data sync to Firebase...');
-              const collections = [
-                'foodLogs', 'waterLogs', 'stepLogs', 'sleepLogs',
-                'vitals', 'bodyMetrics', 'habits', 'habitCompletions',
-                'fastingSessions', 'workouts', 'chatMessages'
-              ] as const;
-
-              for (const col of collections) {
-                try {
-                  console.log(`[Store] Syncing ${col}...`);
-                  const table = db[col];
-                  const localData = await table.toArray();
-
-                  if (localData.length === 0) {
-                    console.log(`[Store] ${col}: No local data to sync`);
-                    continue;
-                  }
-
-                  console.log(`[Store] ${col}: ${localData.length} local records to check`);
-                  const remoteData = await firebaseService.getCollection<any>(col, fbUser.uid);
-                  const remoteTimestamps = new Set(remoteData.map(d => d.timestamp || d.date || d.startTime));
-
-                  const itemsToSync = localData.filter(item => {
-                    const identifier = (item as any).timestamp || (item as any).date || (item as any).startTime;
-                    return !remoteTimestamps.has(identifier);
-                  });
-
-                  if (itemsToSync.length > 0) {
-                    console.log(`[Store] ${col}: Syncing ${itemsToSync.length} new items`);
-                    for (let i = 0; i < itemsToSync.length; i += 500) {
-                      const chunk = itemsToSync.slice(i, i + 500);
-                      await firebaseService.batchAdd(col, chunk, fbUser.uid);
-                    }
-                    console.log(`[Store] ${col}: Cleared local table after sync`);
-                    await table.clear();
-                  } else {
-                    console.log(`[Store] ${col}: All items already synced`);
-                  }
-                } catch (error) {
-                  console.error(`[Store] Failed to sync collection ${col}:`, error);
-                  // Continue with next collection instead of failing completely
-                }
-              }
-
-              console.log('[Store] Data sync completed');
-            };
+            // Firebase onSnapshot listeners are the source of truth for all collection data.
+            // No manual Dexie-to-Firebase push needed — offline persistence handles that.
 
             try {
               // Quick load from local to unblock UI immediately
@@ -376,11 +278,7 @@ export const useAppStore = create<AppState>()(
                     }
                   }
 
-                  // Sync data in background
-                  console.log('[Store] Starting background data sync...');
-                  await syncData();
-
-                  // Register for push notifications if enabled
+                  // Push notifications
                   const { notifications } = get();
                   if (notifications.push) {
                     try {
