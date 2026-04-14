@@ -21,7 +21,8 @@ export default function SettingsScreen() {
     haptics.light();
     try {
       console.log('[Settings] Initiating Google Fit OAuth flow');
-      const response = await fetch('/api/auth/google/url');
+      const currentOrigin = encodeURIComponent(window.location.origin);
+      const response = await fetch(`/api/auth/google/url?origin=${currentOrigin}`);
       const data = await response.json();
 
       if (!response.ok) {

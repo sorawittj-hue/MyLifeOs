@@ -8,14 +8,19 @@ export default function handler(req, res) {
     });
   }
 
-  const protocol = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+  const fallbackProtocol = req.headers["x-forwarded-proto"] || "https";
+  const fallbackHost = req.headers["x-forwarded-host"] || req.headers.host;
+  
+  // Use the origin from query if provided, otherwise fallback
+  const appUrl = req.query.origin || process.env.APP_URL || `${fallbackProtocol}://${fallbackHost}`;
+  
+  // Clean any trailing slashes to be safe
+  const cleanAppUrl = appUrl.replace(/\/$/, "");
 
   const oauth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    `${appUrl}/auth/callback`
+    `${cleanAppUrl}/auth/callback`
   );
 
   const SCOPES = [
@@ -33,6 +38,7 @@ export default function handler(req, res) {
     access_type: "offline",
     scope: SCOPES,
     prompt: "consent",
+    state: Buffer.from(JSON.stringify({ origin: cleanAppUrl })).toString('base64'),
   });
 
   return res.json({ url });

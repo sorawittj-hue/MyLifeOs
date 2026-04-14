@@ -1,17 +1,31 @@
 import { OAuth2Client } from "google-auth-library";
 
 export default async function handler(req, res) {
-  const { code } = req.query;
+  const { code, state } = req.query;
 
   try {
-    const protocol = req.headers["x-forwarded-proto"] || "https";
-    const host = req.headers["x-forwarded-host"] || req.headers.host;
-    const appUrl = process.env.APP_URL || `${protocol}://${host}`;
+    const fallbackProtocol = req.headers["x-forwarded-proto"] || "https";
+    const fallbackHost = req.headers["x-forwarded-host"] || req.headers.host;
+    
+    let appUrl = process.env.APP_URL || `${fallbackProtocol}://${fallbackHost}`;
+    
+    if (state) {
+      try {
+        const decodedState = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
+        if (decodedState.origin) {
+          appUrl = decodedState.origin;
+        }
+      } catch (e) {
+        console.error("Failed to parse state:", e);
+      }
+    }
+    
+    const cleanAppUrl = appUrl.replace(/\/$/, "");
 
     const oauth2Client = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      `${appUrl}/auth/callback`
+      `${cleanAppUrl}/auth/callback`
     );
 
     const { tokens } = await oauth2Client.getToken(code);
