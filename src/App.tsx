@@ -62,7 +62,7 @@ function AuthCallback() {
 }
 
 export default function App() {
-  const { activeTab, setActiveTab, isLoaded, loadUser, theme } = useAppStore();
+  const { activeTab, setActiveTab, isLoaded, loadUser, theme, isGoogleFitConnected, googleFitTokens, setGoogleFitTokens, demoMode } = useAppStore();
   const [showMore, setShowMore] = React.useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -80,6 +80,44 @@ export default function App() {
   useEffect(() => {
     loadUser();
   }, []);
+
+  // Auto-sync Google Fit
+  useEffect(() => {
+    if (!isLoaded) return;
+    
+    let isSyncing = false;
+    const doSync = async () => {
+      if (isSyncing || (!isGoogleFitConnected && !demoMode)) return;
+      isSyncing = true;
+      try {
+        console.log('[App] Auto-syncing Google Fit data...');
+        const { fetchGoogleFitData } = await import('./lib/googleFit');
+        if (demoMode) {
+          await fetchGoogleFitData(googleFitTokens || {} as any, setGoogleFitTokens, true);
+        } else if (googleFitTokens) {
+          await fetchGoogleFitData(googleFitTokens, setGoogleFitTokens);
+        }
+      } catch (err) {
+        console.error('[App] Auto-sync failed:', err);
+      } finally {
+        isSyncing = false;
+      }
+    };
+
+    doSync(); // Initial sync
+
+    // Sync every 5 minutes
+    const interval = setInterval(doSync, 5 * 60 * 1000);
+
+    // Sync on page focus
+    const onFocus = () => doSync();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [isLoaded, isGoogleFitConnected, demoMode, googleFitTokens, setGoogleFitTokens]);
 
   // Sync activeTab with URL
   useEffect(() => {
