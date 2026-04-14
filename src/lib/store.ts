@@ -6,7 +6,7 @@ import { auth, googleProvider } from './firebase';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { firebaseService } from './firebaseService';
 import { registerForPushNotifications } from './notifications';
-import { type RecoveryResult, type StrainResult, type SleepPerformanceResult, type HabitCorrelation, type AgenticIntervention } from './healthAlgorithms';
+import { type RecoveryResult, type StrainResult, type SleepPerformanceResult, type HabitCorrelation, type AgenticIntervention, type ReadinessPrediction } from './healthAlgorithms';
 
 export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings' | 'journal';
 
@@ -30,6 +30,7 @@ export interface DailyMetrics {
   sleepPerformance: SleepPerformanceResult | null;
   habitCorrelations: HabitCorrelation[];
   agenticInterventions?: AgenticIntervention[];
+  tomorrowReadiness?: ReadinessPrediction;
   aiInsight: string;
   lastUpdated: string; // yyyy-MM-dd
 }
@@ -60,6 +61,8 @@ interface AppState {
   fcmToken: string | null;
   // Daily health metrics
   dailyMetrics: DailyMetrics | null;
+  // Privacy Shield
+  privacyShield: boolean;
 
   // Actions
   setUser: (user: User) => void;
@@ -69,6 +72,7 @@ interface AppState {
   setNotifications: (notifs: Partial<AppState['notifications']>) => void;
   setGoogleFitTokens: (tokens: any | null) => void;
   setDemoMode: (enabled: boolean) => void;
+  setPrivacyShield: (enabled: boolean) => void;
   setDashboardWidgets: (widgets: DashboardWidget[]) => void;
   reorderDashboardWidget: (fromIndex: number, toIndex: number) => void;
   toggleDashboardWidget: (widgetId: string) => void;
@@ -96,6 +100,7 @@ export const useAppStore = create<AppState>()(
       dashboardWidgets: DEFAULT_DASHBOARD_WIDGETS,
       fcmToken: null,
       dailyMetrics: null,
+      privacyShield: false,
 
       setUser: async (user) => {
         const firebaseUser = get().firebaseUser;
@@ -125,6 +130,8 @@ export const useAppStore = create<AppState>()(
       },
 
       setDemoMode: (enabled) => set({ demoMode: enabled }),
+      
+      setPrivacyShield: (enabled) => set({ privacyShield: enabled }),
 
       // ── Dashboard Widget Operations ────────────────────────
       setDashboardWidgets: (widgets) => set({ dashboardWidgets: widgets }),

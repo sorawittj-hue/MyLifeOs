@@ -3,7 +3,7 @@
 // so the API key is NEVER exposed in the browser bundle.
 
 import { User, FoodLog, BodyMetric, Vital } from './db';
-import { RecoveryResult, StrainResult, HabitCorrelation } from './healthAlgorithms';
+import { RecoveryResult, StrainResult, HabitCorrelation, ReadinessPrediction, DaySnapshot } from './healthAlgorithms';
 
 // ── Context Types ─────────────────────────────────────────────
 
@@ -15,6 +15,8 @@ export interface AICoachContext {
   // Health analytics
   recovery?: RecoveryResult | null;
   strain?: StrainResult | null;
+  tomorrowReadiness?: ReadinessPrediction | null;
+  recentJournals?: any[];
   habitCorrelations?: HabitCorrelation[];
 }
 
@@ -101,6 +103,16 @@ export async function getAICoachResponse(prompt: string, context: AICoachContext
          Breakdown: Physical Strain = ${context.strain.physicalScore}/21 | Cognitive/Mental Strain = ${context.strain.cognitiveScore}/21`
       : 'Strain data: not available yet';
 
+    const readinessSection = context.tomorrowReadiness
+      ? `TOMORROW'S READINESS PREDICTION: ${context.tomorrowReadiness.score}/100 (${context.tomorrowReadiness.labelTh})
+         Trend: ${context.tomorrowReadiness.trend}`
+      : 'Readiness Prediction: not available';
+
+    const journalSection = context.recentJournals && context.recentJournals.length > 0
+      ? `RECENT JOURNAL ENTRIES (Self-Reported Behaviors):
+         ${JSON.stringify(context.recentJournals.slice(0, 3), null, 2)}`
+      : '';
+
     const habitSection = context.habitCorrelations && context.habitCorrelations.length > 0
       ? `HABIT CORRELATIONS:\n${context.habitCorrelations.map(h => `- ${h.habitName}: ${h.recoveryImpactPct > 0 ? '+' : ''}${h.recoveryImpactPct}% impact on recovery`).join('\n')}`
       : '';
@@ -113,7 +125,10 @@ ${JSON.stringify(context.user, null, 2)}
 TODAY'S HEALTH ANALYTICS:
 ${recoverySection}
 ${strainSection}
+${readinessSection}
 ${habitSection}
+
+${journalSection}
 
 TODAY'S NUTRITION (${context.todayFood.length} items logged):
 Total calories: ${context.todayFood.reduce((s, f) => s + f.calories, 0)} kcal

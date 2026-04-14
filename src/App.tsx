@@ -1,7 +1,7 @@
 import React, { useEffect, Suspense } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { type TabName } from './lib/store';
-import { Home, Utensils, Dumbbell, BarChart3, User, Timer, CheckSquare, Moon, Bot, Settings, RefreshCw, BookOpen } from 'lucide-react';
+import { Home, Utensils, Dumbbell, BarChart3, User, Timer, CheckSquare, Moon, Bot, Settings, RefreshCw, BookOpen, Shield } from 'lucide-react';
 import { useAppStore } from './lib/store';
 import { haptics } from './lib/haptics';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -64,8 +64,9 @@ function AuthCallback() {
 }
 
 export default function App() {
-  const { activeTab, setActiveTab, isLoaded, loadUser, theme } = useAppStore();
+  const { activeTab, setActiveTab, isLoaded, loadUser, theme, privacyShield } = useAppStore();
   const [showMore, setShowMore] = React.useState(false);
+  const [isObscured, setIsObscured] = React.useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -82,6 +83,19 @@ export default function App() {
   useEffect(() => {
     loadUser();
   }, []);
+
+  // ── Privacy Shield (Blur on Background) ────────────────────
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (privacyShield && document.hidden) {
+        setIsObscured(true);
+      } else {
+        setIsObscured(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [privacyShield]);
 
   // ── Perceived real-time health sync (Page Visibility API + throttled poll) ──
   useHealthAutoSync();
@@ -140,6 +154,19 @@ export default function App() {
     );
   }
 
+  const renderPrivacyShieldOverlay = () => {
+    if (!isObscured) return null;
+    return (
+      <div className="fixed inset-0 z-[99999] backdrop-blur-[40px] bg-black/40 flex items-center justify-center transition-all duration-300">
+        <div className="flex flex-col items-center gap-4 text-white drop-shadow-lg">
+          <Shield size={48} className="text-green-500 opacity-80" />
+          <h2 className="text-xl font-bold tracking-widest">PRIVACY SHIELD</h2>
+        </div>
+      </div>
+    );
+  };
+
+
   const navItems = [
     { id: 'dashboard', icon: Home, label: 'หน้าหลัก', path: '/' },
     { id: 'nutrition', icon: Utensils, label: 'อาหาร', path: '/nutrition' },
@@ -158,7 +185,11 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen font-sans selection:bg-green-500/30 transition-colors duration-500 bg-[#f5f5f7] text-zinc-900 dark:bg-[#0a0a0a] dark:text-white">
+    <div className={`min-h-[100dvh] pb-32 transition-colors duration-500 ${theme === 'dark' ? 'bg-black text-white selection:bg-green-500/30' : 'bg-[#f5f5f7] text-zinc-900 selection:bg-green-500/20'}`}>
+      
+      {/* Privacy Shield Overlay */}
+      {renderPrivacyShieldOverlay()}
+      
       {/* Ambient background mesh (dark mode only) */}
       <div className="fixed inset-0 pointer-events-none z-0 mesh-gradient opacity-0 dark:opacity-60" />
 

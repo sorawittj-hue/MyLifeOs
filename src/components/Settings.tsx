@@ -8,7 +8,7 @@ import { requestNotificationPermission, sendNotification, syncNotificationSchedu
 import { fetchGoogleFitData } from '../lib/googleFit';
 
 export default function SettingsScreen() {
-  const { user, setUser, theme, setTheme, units, setUnits, notifications, setNotifications, isGoogleFitConnected, setGoogleFitTokens, googleFitTokens, demoMode, setDemoMode } = useAppStore();
+  const { user, setUser, theme, setTheme, units, setUnits, notifications, setNotifications, isGoogleFitConnected, setGoogleFitTokens, googleFitTokens, demoMode, setDemoMode, privacyShield, setPrivacyShield } = useAppStore();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -448,6 +448,26 @@ export default function SettingsScreen() {
             </div>
             <ChevronRight size={20} className={isDark ? 'text-zinc-700' : 'text-zinc-300'} />
           </button>
+          
+          <div className="p-4 flex flex-col gap-2">
+            <div className="flex justify-between items-center w-full">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center">
+                  <Shield size={20} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-medium text-left">Privacy Shield</span>
+                  <span className={`text-[10px] ${textMuted} mt-0.5`}>เบลอข้อมูลสุขภาพเมื่อสลับแอป</span>
+                </div>
+              </div>
+              <button
+                onClick={() => { haptics.light(); setPrivacyShield(!privacyShield); }}
+                className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${privacyShield ? 'bg-green-500' : isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}
+              >
+                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform duration-300 shadow-sm ${privacyShield ? 'transform translate-x-6' : ''}`} />
+              </button>
+            </div>
+          </div>
           <button
             onClick={exportData}
             disabled={isExporting}

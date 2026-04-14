@@ -21,10 +21,11 @@ import { where, orderBy, limit } from 'firebase/firestore';
 import { StreakDashboard } from './StreakBadges';
 import {
   calculateSleepPerformance, calculateRecoveryScore, calculateStrainScore, computeHabitCorrelations,
-  getRecoveryRecommendation, generateAgenticInterventions,
+  getRecoveryRecommendation, generateAgenticInterventions, predictTomorrowsReadiness,
   type RecoveryInput, type StrainInput, type DaySnapshot, type CognitiveInput
 } from '../lib/healthAlgorithms';
 import { generateDailyInsight } from '../lib/gemini';
+import { fetchGoogleFitData } from '../lib/googleFit';
 import { onSyncStatusChange, type SyncEvent, type SyncStatus as HealthSyncStatus } from '../hooks/useHealthAutoSync';
 import type { HabitCompletion, Habit, Workout } from '../lib/db';
 
@@ -224,6 +225,11 @@ export default function Dashboard() {
   const [isMetricsLoading, setIsMetricsLoading] = useState(true);
   const [chartReady, setChartReady] = useState(false);
 
+  // Pull-to-refresh state
+  const [pullY, setPullY] = useState(0);
+  const touchStartY = useRef(0);
+  const isPulling = useRef(false);
+
   // ── Raw data atoms (populated by onSnapshot listeners) ────────────
   const [foods, setFoods] = useState<FoodLog[]>([]);
   const [water, setWater] = useState<WaterLog[]>([]);
@@ -414,6 +420,8 @@ export default function Dashboard() {
     const recovery = calculateRecoveryScore(recoveryInput);
     const strain = calculateStrainScore(strainInput, cognitiveInput);
     const sleepPerformance = calculateSleepPerformance(sleepHours, 10, 0); // Need real values of previous day strain if available
+    const sleepDebt = Math.max(0, sleepPerformance.sleepNeed - sleepPerformance.actualSleep);
+    const tomorrowReadiness = predictTomorrowsReadiness(recovery, strain, sleepDebt);
 
     // ── Habit correlations (last 14 days) ──────────────────────
     const last14Days: DaySnapshot[] = [];
@@ -442,7 +450,7 @@ export default function Dashboard() {
     const agenticInterventions = generateAgenticInterventions(recovery, strain);
 
     const metrics: DailyMetrics = {
-      recovery, strain, sleepPerformance, habitCorrelations, agenticInterventions,
+      recovery, strain, sleepPerformance, habitCorrelations, agenticInterventions, tomorrowReadiness,
       aiInsight: getRecoveryRecommendation(recovery, strain),
       lastUpdated: today,
     };
@@ -532,93 +540,102 @@ export default function Dashboard() {
 
     switch (widgetId) {
       case 'steps':
+        const stepsMockTrend = [
+          { val: Math.max(0, stats.steps - 3000) }, { val: Math.max(0, stats.steps - 1000) },
+          { val: Math.max(0, stats.steps - 500) }, { val: Math.max(0, stats.steps + 2000) },
+          { val: Math.max(0, stats.steps - 1200) }, { val: Math.max(0, stats.steps - 400) },
+          { val: stats.steps }
+        ];
         return (
           <motion.div
             variants={item}
             whileHover={{ y: -4, scale: 1.01, transition: { duration: 0.2 } }}
             onClick={() => { haptics.light(); navigate('/metrics'); }}
-            className={`col-span-6 rounded-[28px] p-6 flex items-center justify-between cursor-pointer group overflow-hidden relative shadow-lg ${
-              isDark
-                ? 'bg-gradient-to-br from-orange-500/20 to-amber-500/5 border border-orange-500/20 ring-1 ring-white/5'
-                : 'bg-gradient-to-br from-orange-500 to-amber-400 text-white shadow-orange-500/30'
-            } ${isEmphasized ? 'ring-2 ring-orange-500 shadow-orange-500/40' : ''}`}
+            className={`col-span-6 rounded-[28px] p-6 flex flex-col justify-between cursor-pointer group overflow-hidden relative shadow-lg glass-card border border-orange-500/10 ${isEmphasized ? 'glow-orange' : ''}`}
           >
-            <div className="flex items-center gap-5 relative z-10 w-full">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center backdrop-blur-md ${isDark ? 'bg-orange-500/20 text-orange-400' : 'bg-white/20 text-white shadow-inner'}`}>
-                <Activity size={28} />
-              </div>
-              <div className="flex-1">
-                <p className="text-4xl font-black tracking-tight tabular-nums drop-shadow-sm">
-                  {stats.steps.toLocaleString()}
-                  <span className={`text-sm font-bold ml-1.5 ${isDark ? 'text-orange-200/50' : 'text-orange-50'}`}>ก้าว</span>
-                </p>
-                <div className="flex items-center gap-3 mt-1.5 w-full max-w-[200px]">
-                  <div className={`flex-1 h-2.5 rounded-full overflow-hidden backdrop-blur-sm ${isDark ? 'bg-black/40' : 'bg-black/20 shadow-inner'}`}>
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.min(stepsProgress, 100)}%` }}
-                      transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-                      className={`h-full rounded-full ${isDark ? 'bg-gradient-to-r from-orange-400 to-amber-300' : 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]'}`}
-                    />
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-orange-200/70' : 'text-orange-50'}`}>{stepsProgress}%</span>
+            <div className="flex items-center justify-between relative z-10 w-full mb-2">
+              <div className="flex items-center gap-4">
+                <ProgressRing progress={stepsProgress} size={64} stroke={6} color="#f97316" color2="#fbbf24" bgColor={isDark ? 'rgba(0,0,0,0.4)': 'rgba(0,0,0,0.05)'}>
+                  <Activity size={24} className="text-orange-500 drop-shadow-sm" />
+                </ProgressRing>
+                <div>
+                  <p className="text-4xl font-black tracking-tight tabular-nums drop-shadow-sm bg-clip-text text-transparent bg-gradient-to-r from-orange-500 to-amber-500">
+                    {stats.steps.toLocaleString()}
+                  </p>
+                  <p className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-orange-200/50' : 'text-orange-800/50'} mt-0.5`}>เป้าหมาย 10,000</p>
                 </div>
               </div>
+              {isGoogleFitConnected && (
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full z-10 backdrop-blur-md ${isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-700'}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full animate-pulse bg-current`} />
+                  <span className="text-[9px] font-bold uppercase tracking-widest">Synced</span>
+                </div>
+              )}
             </div>
-            {isGoogleFitConnected && (
-              <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full z-10 backdrop-blur-md ${isDark ? 'bg-green-500/20 text-green-300' : 'bg-white/20 text-white border border-white/30'}`}>
-                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isDark ? 'bg-green-400' : 'bg-white'}`} />
-                <span className="text-[9px] font-bold uppercase tracking-widest">Synced</span>
-              </div>
-            )}
-            <Activity className={`absolute -right-4 -bottom-6 w-32 h-32 rotate-12 group-hover:scale-110 group-hover:rotate-6 transition-all duration-700 ease-out pointer-events-none drop-shadow-2xl ${isDark ? 'text-orange-500/10' : 'text-white/10'}`} />
+            <div className="h-[40px] w-[105%] -ml-[2.5%] -mb-6 mt-1 opacity-60">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stepsMockTrend}>
+                  <defs>
+                    <linearGradient id="colorSteps" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="val" stroke="#f97316" strokeWidth={2} fillOpacity={1} fill="url(#colorSteps)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </motion.div>
         );
 
       case 'calories':
+        const calMockTrend = [
+          { val: Math.max(0, stats.calories - 300) }, { val: Math.max(0, stats.calories - 100) },
+          { val: Math.max(0, stats.calories - 50) }, { val: Math.max(0, stats.calories + 200) },
+          { val: Math.max(0, stats.calories - 200) }, { val: Math.max(0, stats.calories - 400) },
+          { val: stats.calories }
+        ];
         return (
           <motion.div
             variants={item}
             whileHover={{ y: -4, scale: 1.02, transition: { duration: 0.2 } }}
             onClick={() => { haptics.light(); navigate('/nutrition'); }}
-            className={`col-span-6 sm:col-span-4 ${cardBg} p-5 rounded-[28px] flex flex-col justify-between cursor-pointer relative group min-h-[220px] shadow-lg border border-black/[0.03] dark:border-white/[0.03] ${isEmphasized ? 'ring-2 ring-red-500/50 shadow-red-500/20' : ''}`}
+            className={`col-span-6 sm:col-span-4 glass-card p-5 rounded-[28px] flex flex-col justify-between cursor-pointer relative group min-h-[220px] shadow-lg border-red-500/10 ${isEmphasized ? 'glow-red' : ''}`}
           >
-            <div className={`absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-red-500/20 to-orange-500/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none transition-opacity duration-1000 group-hover:opacity-100 opacity-60`} />
+            <div className={`absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-red-500/10 to-transparent rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none`} />
             <div className={`absolute -right-2 bottom-0 p-4 transition-transform duration-700 ease-out group-hover:scale-110 group-hover:-rotate-6 pointer-events-none ${isDark ? 'text-red-500/5' : 'text-red-500/[0.03]'}`}>
               <Flame size={140} />
             </div>
-            <div className="flex justify-between items-start relative z-10">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${isDark ? 'bg-gradient-to-br from-red-500/20 to-orange-500/10 text-red-400 border border-red-500/20' : 'bg-gradient-to-br from-red-50 to-orange-50 text-red-500 border border-red-100'}`}>
-                <Flame size={24} className="drop-shadow-sm" />
-              </div>
-              <div className="text-right">
-                <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted}`}>พลังงานวันนี้</p>
-                <div className={`inline-block px-2 py-0.5 rounded-full mt-1 ${isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600'}`}>
-                  <p className="text-[10px] font-bold">เป้าหมาย {user?.dailyCalorieTarget || 2200}</p>
-                </div>
-              </div>
+            
+            <div className="flex justify-between items-start relative z-10 w-full mb-4">
+               <div>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${isDark ? 'bg-gradient-to-br from-red-500/20 to-orange-500/10 text-red-500' : 'bg-red-50 text-red-500'}`}>
+                    <Flame size={24} className="drop-shadow-sm" />
+                  </div>
+                  <h2 className={`mt-4 text-5xl font-black tracking-tighter tabular-nums bg-clip-text text-transparent bg-gradient-to-br from-red-500 to-orange-400`}>
+                    {stats.calories} <span className={`${textMuted} text-lg font-bold uppercase`}>kcal</span>
+                  </h2>
+               </div>
+               <div className="flex flex-col items-end gap-2">
+                 <ProgressRing progress={calorieProgress} size={56} stroke={5} color="#ef4444" color2="#f97316" bgColor={isDark ? 'rgba(0,0,0,0.4)': 'rgba(0,0,0,0.05)'}>
+                    <p className={`text-xs font-bold ${isDark ? 'text-zinc-300' : 'text-zinc-600'}`}>{calorieProgress}%</p>
+                 </ProgressRing>
+                 <p className={`text-[9px] font-bold uppercase tracking-widest ${textMuted} mt-1`}>เป้าหมาย {user?.dailyCalorieTarget || 2200}</p>
+               </div>
             </div>
-            <div className="relative z-10 mt-6">
-              <div className="flex items-baseline gap-2">
-                <h2 className={`text-6xl font-black tracking-tighter tabular-nums bg-gradient-to-br ${isDark ? 'from-white to-zinc-400' : 'from-zinc-900 to-zinc-600'} text-transparent bg-clip-text`}>
-                  {stats.calories}
-                </h2>
-                <span className={`${textMuted} text-sm font-bold uppercase tracking-widest`}>kcal</span>
-              </div>
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between text-[10px] items-center font-bold uppercase tracking-wider">
-                  <span className={textMuted}>ความคืบหน้า</span>
-                  <span className="text-red-500">{calorieProgress}%</span>
-                </div>
-                <div className={`h-2.5 rounded-full overflow-hidden shadow-inner ${isDark ? 'bg-black/60' : 'bg-black/[0.04]'}`}>
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(calorieProgress, 100)}%` }}
-                    transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-                    className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full"
-                  />
-                </div>
-              </div>
+            
+            <div className="relative z-10 h-[60px] w-[105%] -ml-[2.5%] -mb-5 opacity-80">
+               <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={calMockTrend}>
+                  <defs>
+                    <linearGradient id="colorCal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="step" dataKey="val" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorCal)" />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </motion.div>
         );
@@ -659,25 +676,39 @@ export default function Dashboard() {
         );
 
       case 'heartRate':
+        const hrMockTrend = [65, 70, 72, 85, 90, 78, stats.heartRate].map(r => ({ val: r }));
         return (
           <motion.div
             variants={item}
             whileHover={{ y: -4, scale: 1.02, transition: { duration: 0.2 } }}
             onClick={() => { haptics.light(); navigate('/metrics'); }}
-            className={`col-span-3 sm:col-span-2 ${cardBg} p-4 rounded-[28px] flex flex-col justify-between cursor-pointer min-h-[140px] shadow-lg border border-black/[0.03] dark:border-white/[0.03] relative overflow-hidden`}
+            className={`col-span-3 sm:col-span-2 glass-card p-4 rounded-[28px] flex flex-col justify-between cursor-pointer min-h-[140px] shadow-lg relative overflow-hidden`}
           >
             <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-red-500/10 rounded-full blur-xl pointer-events-none" />
-            <div className="flex justify-between items-center relative z-10 w-full">
-              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-inner ${isDark ? 'bg-gradient-to-br from-red-500/20 to-rose-500/10 text-red-400 border border-red-500/20' : 'bg-gradient-to-br from-red-50 to-rose-50 text-red-500 border border-red-100'}`}>
-                <Heart size={20} className="animate-pulse drop-shadow-sm" />
+            <div className="flex justify-between items-center relative z-10 w-full mb-1">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-inner bg-gradient-to-br from-red-500/20 to-rose-500/10 text-red-500`}>
+                <Heart size={16} className="animate-pulse drop-shadow-sm shadow-red-500" />
               </div>
-              <Wind size={16} className={`${textMuted} opacity-50`} />
             </div>
-            <div className="relative z-10 w-full mt-3">
-              <p className="text-3xl font-black tabular-nums tracking-tighter drop-shadow-sm">{stats.heartRate}</p>
-              <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted} mt-0.5`}>BPM</p>
+            
+            <div className="relative z-10 w-full flex-1 flex flex-col justify-center">
+              <p className="text-4xl font-black tabular-nums tracking-tighter drop-shadow-sm">{stats.heartRate}</p>
+              <p className={`text-[9px] font-bold uppercase tracking-widest ${textMuted}`}>Resting Rate</p>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-red-500/5 to-transparent pointer-events-none" />
+            
+            <div className="absolute bottom-0 left-0 right-0 h-1/2 opacity-70">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={hrMockTrend}>
+                  <defs>
+                    <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="val" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorHr)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </motion.div>
         );
 
@@ -840,15 +871,70 @@ export default function Dashboard() {
   const rec = dailyMetrics?.recovery;
   const str = dailyMetrics?.strain;
   const correlations = dailyMetrics?.habitCorrelations || [];
+  const { googleFitTokens, setGoogleFitTokens, demoMode } = useAppStore();
+
+  const handleManualSync = async () => {
+    if (!googleFitTokens && !demoMode) return;
+    try {
+      if (demoMode) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        await fetchGoogleFitData(googleFitTokens || {} as any, setGoogleFitTokens, true);
+      } else {
+        await fetchGoogleFitData(googleFitTokens!, setGoogleFitTokens, false, firebaseUser?.uid);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY === 0) {
+      touchStartY.current = e.touches[0].clientY;
+      isPulling.current = true;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPulling.current) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY.current;
+    if (diff > 0 && window.scrollY === 0) {
+      setPullY(Math.min(diff * 0.4, 80)); 
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pullY >= 60) {
+      haptics.medium();
+      handleManualSync();
+    }
+    isPulling.current = false;
+    setPullY(0);
+  };
 
   return (
     <motion.div
-      variants={container}
       initial="hidden"
-      animate="show"
-      className="p-5 space-y-5 pb-32 max-w-2xl mx-auto"
+      animate="visible"
+      variants={container}
+      className="p-4 space-y-6 max-w-lg mx-auto pb-6 relative overflow-hidden"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ minHeight: '100dvh' }}
     >
-      {/* ── Header ───────────────────────────────────────────── */}
+      {/* Pull-to-refresh indicator */}
+      <motion.div
+        className="absolute left-0 right-0 top-0 flex justify-center pointer-events-none z-50"
+        animate={{ y: pullY - 40, opacity: pullY / 80 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      >
+        <div className={`p-2 rounded-full shadow-lg ${isDark ? 'bg-zinc-800 text-green-400' : 'bg-white text-green-500'}`}>
+           <RefreshCw size={20} className={syncStatus.status === 'syncing' ? 'animate-spin' : ''} style={{ transform: `rotate(${pullY * 3}deg)` }} />
+        </div>
+      </motion.div>
+
+      {/* ── Header Area ──────────────────────────────────────── */}
       <header className="flex justify-between items-end px-2 pt-2">
         <div>
           <motion.div

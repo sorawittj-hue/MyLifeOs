@@ -103,11 +103,13 @@ export default function AICoach() {
       let foodLogs: any[] = [];
       let bodyMetrics: any[] = [];
       let vitals: any[] = [];
+      let recentJournals: any[] = [];
 
       if (firebaseUser) {
         foodLogs = (await firebaseService.getCollection('foodLogs', firebaseUser.uid) as any[]).filter(f => f.date === today);
         bodyMetrics = (await firebaseService.getCollection('bodyMetrics', firebaseUser.uid) as any[]).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
         vitals = (await firebaseService.getCollection('vitals', firebaseUser.uid) as any[]).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+        recentJournals = (await firebaseService.getCollection('dailyJournals', firebaseUser.uid) as any[]).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
       } else {
         foodLogs = await db.foodLogs.where('date').equals(today).toArray();
         bodyMetrics = await db.bodyMetrics.reverse().limit(5).toArray();
@@ -122,6 +124,8 @@ export default function AICoach() {
         // Inject recovery/strain for smart coaching
         recovery: dailyMetrics?.recovery ?? null,
         strain: dailyMetrics?.strain ?? null,
+        tomorrowReadiness: dailyMetrics?.tomorrowReadiness ?? null,
+        recentJournals,
         habitCorrelations: dailyMetrics?.habitCorrelations ?? [],
       };
 

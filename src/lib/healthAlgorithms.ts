@@ -82,6 +82,12 @@ export interface StrainResult {
   gradientTo: string;
 }
 
+export interface ReadinessPrediction {
+  score: number; // 0-100
+  labelTh: string;
+  trend: 'up' | 'down' | 'stable';
+}
+
 // ── Utility: Z-Score Calculation ─────────────────────────────
 
 function getZScore(val: number, arr: number[], invert: boolean = false): number {
@@ -477,4 +483,36 @@ export function getRecoveryRecommendation(
     return 'Recovery ดีเยี่ยม! ค่า Z-Score ของร่างกายพร้อมเทคแอคชั่นและทนต่อระดับ Strain สูงแล้ววันนี้';
   }
   return 'ร่างกายรักษาสมดุล Allostatic Load ได้ยอดเยี่ยม คงความต่อเนื่องระดับนี้ไว้!';
+}
+
+// ── Predictive Readiness Engine ────────────────────────────────
+
+export function predictTomorrowsReadiness(
+  currentRecovery: RecoveryResult,
+  currentStrain: StrainResult,
+  sleepDebtHours: number
+): ReadinessPrediction {
+  let basePrediction = currentRecovery.score;
+  
+  if (currentStrain.totalAllostaticLoad > 14) {
+    basePrediction -= (currentStrain.totalAllostaticLoad - 14) * 2.5; 
+  } else if (currentStrain.totalAllostaticLoad < 10) {
+    basePrediction += 5; // Active recovery
+  }
+  
+  if (sleepDebtHours > 1) {
+    basePrediction -= sleepDebtHours * 4;
+  }
+  
+  basePrediction = Math.min(Math.max(basePrediction, 10), 98);
+  
+  let trend: 'up' | 'down' | 'stable' = 'stable';
+  if (basePrediction > currentRecovery.score + 5) trend = 'up';
+  else if (basePrediction < currentRecovery.score - 5) trend = 'down';
+  
+  return {
+    score: Math.round(basePrediction),
+    trend,
+    labelTh: basePrediction >= 67 ? 'ฟื้นตัวพรุ่งนี้: ดีเยี่ยม' : basePrediction >= 40 ? 'ฟื้นตัวพรุ่งนี้: ปานกลาง' : 'พรุ่งนี้: เสี่ยงสะสมโหลดสูง'
+  };
 }
