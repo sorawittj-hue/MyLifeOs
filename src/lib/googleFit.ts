@@ -25,7 +25,7 @@ export async function fetchGoogleFitData(tokens: GoogleFitTokens, setTokens: (t:
 
       // Mock Vitals
       const hr = Math.floor(Math.random() * 20) + 65;
-      const existingHr = await db.vitals.where({ date, type: 'heart_rate' }).first();
+      const existingHr = (await db.vitals.where('date').equals(date).toArray()).find(v => v.type === 'heart_rate');
       if (!existingHr) {
         await db.vitals.add(withSyncMeta({ date, time: '08:00', type: 'heart_rate', value1: hr, unit: 'BPM', source: 'demo' }) as Vital);
       }
@@ -83,7 +83,10 @@ async function syncSteps(accessToken: string, startTime: number, endTime: number
   const response = await axios.post(
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
-      aggregateBy: [{ dataTypeName: 'com.google.step_count.delta' }],
+      aggregateBy: [{ 
+        dataTypeName: 'com.google.step_count.delta',
+        dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:estimated_steps'
+      }],
       bucketByTime: { durationMillis: 86400000 },
       startTimeMillis: startTime,
       endTimeMillis: endTime,
@@ -124,6 +127,10 @@ async function syncHeartRate(accessToken: string, startTime: number, endTime: nu
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
+  const existingVitals = await db.vitals.where('type').equals('heart_rate').toArray();
+  const vitalMap = new Set(existingVitals.map(v => `${v.date}-${v.time}`));
+  const newRecords: Vital[] = [];
+
   for (const bucket of response.data.bucket) {
     if (bucket.dataset[0]?.point) {
       for (const point of bucket.dataset[0].point) {
@@ -131,10 +138,10 @@ async function syncHeartRate(accessToken: string, startTime: number, endTime: nu
         const timestamp = parseInt(point.startTimeNanos) / 1000000;
         const date = format(new Date(timestamp), 'yyyy-MM-dd');
         const time = format(new Date(timestamp), 'HH:mm');
+        const key = `${date}-${time}`;
 
-        const existing = await db.vitals.where({ date, time, type: 'heart_rate' }).first();
-        if (!existing) {
-          await db.vitals.add(withSyncMeta({
+        if (!vitalMap.has(key)) {
+          newRecords.push(withSyncMeta({
             date,
             time,
             type: 'heart_rate',
@@ -142,9 +149,14 @@ async function syncHeartRate(accessToken: string, startTime: number, endTime: nu
             unit: 'BPM',
             source: 'google_fit'
           }) as Vital);
+          vitalMap.add(key);
         }
       }
     }
+  }
+  
+  if (newRecords.length > 0) {
+    await db.vitals.bulkAdd(newRecords);
   }
 }
 
@@ -189,6 +201,10 @@ async function syncBloodPressure(accessToken: string, startTime: number, endTime
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
+  const existingVitals = await db.vitals.where('type').equals('blood_pressure').toArray();
+  const vitalMap = new Set(existingVitals.map(v => `${v.date}-${v.time}`));
+  const newRecords: Vital[] = [];
+
   for (const bucket of response.data.bucket) {
     if (bucket.dataset[0]?.point) {
       for (const point of bucket.dataset[0].point) {
@@ -197,10 +213,10 @@ async function syncBloodPressure(accessToken: string, startTime: number, endTime
         const timestamp = parseInt(point.startTimeNanos) / 1000000;
         const date = format(new Date(timestamp), 'yyyy-MM-dd');
         const time = format(new Date(timestamp), 'HH:mm');
+        const key = `${date}-${time}`;
 
-        const existing = await db.vitals.where({ date, time, type: 'blood_pressure' }).first();
-        if (!existing) {
-          await db.vitals.add(withSyncMeta({
+        if (!vitalMap.has(key)) {
+          newRecords.push(withSyncMeta({
             date,
             time,
             type: 'blood_pressure',
@@ -209,9 +225,14 @@ async function syncBloodPressure(accessToken: string, startTime: number, endTime
             unit: 'mmHg',
             source: 'google_fit'
           }) as Vital);
+          vitalMap.add(key);
         }
       }
     }
+  }
+  
+  if (newRecords.length > 0) {
+    await db.vitals.bulkAdd(newRecords);
   }
 }
 
@@ -228,6 +249,10 @@ async function syncOxygen(accessToken: string, startTime: number, endTime: numbe
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
+  const existingVitals = await db.vitals.where('type').equals('oxygen').toArray();
+  const vitalMap = new Set(existingVitals.map(v => `${v.date}-${v.time}`));
+  const newRecords: Vital[] = [];
+
   for (const bucket of response.data.bucket) {
     if (bucket.dataset[0]?.point) {
       for (const point of bucket.dataset[0].point) {
@@ -235,10 +260,10 @@ async function syncOxygen(accessToken: string, startTime: number, endTime: numbe
         const timestamp = parseInt(point.startTimeNanos) / 1000000;
         const date = format(new Date(timestamp), 'yyyy-MM-dd');
         const time = format(new Date(timestamp), 'HH:mm');
+        const key = `${date}-${time}`;
 
-        const existing = await db.vitals.where({ date, time, type: 'oxygen' }).first();
-        if (!existing) {
-          await db.vitals.add(withSyncMeta({
+        if (!vitalMap.has(key)) {
+          newRecords.push(withSyncMeta({
             date,
             time,
             type: 'oxygen',
@@ -246,8 +271,13 @@ async function syncOxygen(accessToken: string, startTime: number, endTime: numbe
             unit: '%',
             source: 'google_fit'
           }) as Vital);
+          vitalMap.add(key);
         }
       }
     }
+  }
+
+  if (newRecords.length > 0) {
+    await db.vitals.bulkAdd(newRecords);
   }
 }

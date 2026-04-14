@@ -50,7 +50,10 @@ export default function DebugSync() {
         const stepsRes = await axios.post(
           'https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate',
           {
-            aggregateBy: [{ dataTypeName: 'com.google.step_count.delta' }],
+            aggregateBy: [{ 
+              dataTypeName: 'com.google.step_count.delta',
+              dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:estimated_steps'
+            }],
             bucketByTime: { durationMillis: 86400000 },
             startTimeMillis: yesterday,
             endTimeMillis: now,
