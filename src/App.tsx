@@ -18,6 +18,7 @@ const SleepTracker = React.lazy(() => import('./components/SleepTracker'));
 const SettingsScreen = React.lazy(() => import('./components/Settings'));
 const Profile = React.lazy(() => import('./components/Profile'));
 const DebugSync = React.lazy(() => import('./components/DebugSync'));
+const AICoach = React.lazy(() => import('./components/AICoach'));
 
 // ── Route Loading Fallback ───────────────────────────────────
 function RouteLoadingFallback() {
@@ -146,6 +147,7 @@ export default function App() {
     { id: 'fasting', icon: Timer, label: 'ทำ IF', path: '/fasting' },
     { id: 'habits', icon: CheckSquare, label: 'นิสัย', path: '/habits' },
     { id: 'sleep', icon: Moon, label: 'การนอน', path: '/sleep' },
+    { id: 'coach', icon: Bot, label: 'AI โค้ช', path: '/coach' },
     { id: 'settings', icon: Settings, label: 'ตั้งค่า', path: '/settings' },
   ];
 
@@ -168,6 +170,7 @@ export default function App() {
               <Route path="/habits" element={<ErrorBoundary><HabitTracker /></ErrorBoundary>} />
               <Route path="/sleep" element={<ErrorBoundary><SleepTracker /></ErrorBoundary>} />
               <Route path="/settings" element={<ErrorBoundary><SettingsScreen /></ErrorBoundary>} />
+              <Route path="/coach" element={<ErrorBoundary><AICoach /></ErrorBoundary>} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/api/auth/callback" element={<AuthCallback />} />
               <Route path="/debug" element={<ErrorBoundary><DebugSync /></ErrorBoundary>} />

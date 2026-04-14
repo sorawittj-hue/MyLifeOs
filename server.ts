@@ -21,6 +21,49 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 
+// ── MiniMax AI Proxy ──────────────────────────────────────────
+// Keeps the API key server-side; browser calls /api/ai/chat
+const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || 'sk-api-3tsdmeTvUWFYAqgWdAsMCrH4OuFnymWN7nnVS3frQO5jXaW1ibOtBPmNVy3_FnZ4eUyf3YOzgTLt2HWW6VNwUteJN7bIgamGONlxWVOpgC1ghNe_6cH977c';
+const MINIMAX_BASE_URL = 'https://api.minimax.io/v1'; // International endpoint
+// Try models in order until one works
+const MINIMAX_MODELS = ['MiniMax-M2.7', 'MiniMax-M2.5', 'MiniMax-M2'];
+
+app.post('/api/ai/chat', async (req, res) => {
+  const { messages, temperature = 0.7 } = req.body;
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'Missing messages array' });
+  }
+
+  let lastError = '';
+  for (const model of MINIMAX_MODELS) {
+    try {
+      const response = await axios.post(
+        `${MINIMAX_BASE_URL}/chat/completions`,
+        { model, messages, temperature, max_tokens: 1024 },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${MINIMAX_API_KEY}`,
+          },
+          timeout: 30000,
+        }
+      );
+      const content = response.data?.choices?.[0]?.message?.content || '';
+      return res.json({ content });
+    } catch (err: any) {
+      lastError = err?.response?.data?.error?.message || err.message;
+      // If 401/403, key is wrong — no point retrying with other models
+      if (err?.response?.status === 401 || err?.response?.status === 403) break;
+      // Otherwise try next model
+      console.warn(`[AI] Model ${model} failed: ${lastError}, trying next...`);
+    }
+  }
+
+  console.error('[AI] All models failed:', lastError);
+  res.status(502).json({ error: lastError || 'AI service unavailable' });
+});
+
+
 const oauth2Client = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,

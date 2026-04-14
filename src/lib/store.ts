@@ -7,6 +7,7 @@ import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } fr
 import { firebaseService } from './firebaseService';
 import { syncAllCollections, getPendingSyncCount, getIsOnline } from './syncEngine';
 import { registerForPushNotifications } from './notifications';
+import { type RecoveryResult, type StrainResult, type HabitCorrelation } from './healthAlgorithms';
 
 export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings';
 
@@ -22,6 +23,15 @@ const DEFAULT_DASHBOARD_WIDGETS: DashboardWidget[] = [
   { id: 'streaks', order: 7, visible: true, size: 'large' },
   { id: 'quickActions', order: 8, visible: true, size: 'medium' },
 ];
+
+// ── Daily Health Metrics (Recovery + Strain) ─────────────────
+export interface DailyMetrics {
+  recovery: RecoveryResult | null;
+  strain: StrainResult | null;
+  habitCorrelations: HabitCorrelation[];
+  aiInsight: string;
+  lastUpdated: string; // yyyy-MM-dd
+}
 
 interface AppState {
   user: User | null;
@@ -49,6 +59,8 @@ interface AppState {
   dashboardWidgets: DashboardWidget[];
   // FCM token
   fcmToken: string | null;
+  // Daily health metrics
+  dailyMetrics: DailyMetrics | null;
 
   // Actions
   setUser: (user: User) => void;
@@ -61,6 +73,7 @@ interface AppState {
   setDashboardWidgets: (widgets: DashboardWidget[]) => void;
   reorderDashboardWidget: (fromIndex: number, toIndex: number) => void;
   toggleDashboardWidget: (widgetId: string) => void;
+  setDailyMetrics: (metrics: DailyMetrics) => void;
   triggerSync: () => Promise<void>;
   loadUser: () => Promise<void>;
   login: () => Promise<void>;
@@ -86,6 +99,7 @@ export const useAppStore = create<AppState>()(
       isOnline: navigator.onLine,
       dashboardWidgets: DEFAULT_DASHBOARD_WIDGETS,
       fcmToken: null,
+      dailyMetrics: null,
 
       setUser: async (user) => {
         const firebaseUser = get().firebaseUser;
@@ -134,6 +148,8 @@ export const useAppStore = create<AppState>()(
         );
         set({ dashboardWidgets: widgets });
       },
+
+      setDailyMetrics: (metrics) => set({ dailyMetrics: metrics }),
 
       // ── Sync Operations ────────────────────────────────────
       triggerSync: async () => {
@@ -221,8 +237,8 @@ export const useAppStore = create<AppState>()(
             const { firebaseUser } = get();
             if (firebaseUser) {
               console.log('[Store] Back online - triggering sync');
-              syncAllCollections(firebaseUser.uid).then(result => {
-                const pending = getPendingSyncCount();
+              syncAllCollections(firebaseUser.uid).then(async result => {
+                const pending = await getPendingSyncCount();
                 set({
                   pendingSyncCount: pending,
                   syncStatus: result.errors.length > 0 ? 'error' : 'idle'
