@@ -35,7 +35,6 @@ export async function fetchGoogleFitData(tokens: GoogleFitTokens, setTokens: (t:
 
   let accessToken = tokens.access_token;
 
-  // Check if token is expired (expiry_date is in ms)
   if (tokens.expiry_date && Date.now() > tokens.expiry_date - 60000) {
     if (tokens.refresh_token) {
       try {
@@ -80,23 +79,26 @@ export async function fetchGoogleFitData(tokens: GoogleFitTokens, setTokens: (t:
 }
 
 async function syncSteps(accessToken: string, startTime: number, endTime: number) {
-  console.log('[GoogleFit] Syncing steps from', format(startTime, 'yyyy-MM-dd HH:mm'));
+  console.log('[GoogleFit] Syncing steps...');
   const response = await axios.post(
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
       aggregateBy: [{ dataTypeName: 'com.google.step_count.delta' }],
-      bucketByTime: { durationMillis: 86400000 }, // 1 day
+      bucketByTime: { durationMillis: 86400000 },
       startTimeMillis: startTime,
       endTimeMillis: endTime,
     },
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
-  console.log('[GoogleFit] Steps buckets received:', response.data.bucket?.length || 0);
-
   for (const bucket of response.data.bucket) {
     const date = format(new Date(parseInt(bucket.startTimeMillis)), 'yyyy-MM-dd');
-    const count = bucket.dataset[0].point[0]?.value[0]?.intVal || 0;
+    let count = 0;
+    if (bucket.dataset[0]?.point) {
+      for (const point of bucket.dataset[0].point) {
+        count += point.value[0]?.intVal || point.value[0]?.fpVal || 0;
+      }
+    }
     
     if (count > 0) {
       const existing = await db.stepLogs.where('date').equals(date).first();
@@ -115,42 +117,45 @@ async function syncHeartRate(accessToken: string, startTime: number, endTime: nu
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
       aggregateBy: [{ dataTypeName: 'com.google.heart_rate.bpm' }],
-      bucketByTime: { durationMillis: 3600000 }, // 1 hour
+      bucketByTime: { durationMillis: 3600000 },
       startTimeMillis: startTime,
       endTimeMillis: endTime,
     },
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  console.log('[GoogleFit] Heart rate buckets received:', response.data.bucket?.length || 0);
 
   for (const bucket of response.data.bucket) {
-    const points = bucket.dataset[0].point;
-    if (points.length > 0) {
-      const avgHr = points.reduce((acc: number, p: any) => acc + p.value[0].fpVal, 0) / points.length;
-      const date = format(new Date(parseInt(bucket.startTimeMillis)), 'yyyy-MM-dd');
-      const time = format(new Date(parseInt(bucket.startTimeMillis)), 'HH:mm');
-      
-      // Only add if not already present for this exact time
-      const existing = await db.vitals.where({ date, time, type: 'heart_rate' }).first();
-      if (!existing) {
-        await db.vitals.add(withSyncMeta({
-          date,
-          time,
-          type: 'heart_rate',
-          value1: Math.round(avgHr),
-          unit: 'BPM',
-          source: 'google_fit'
-        }) as Vital);
+    if (bucket.dataset[0]?.point) {
+      for (const point of bucket.dataset[0].point) {
+        const value = Math.round(point.value[0].fpVal || 0);
+        const timestamp = parseInt(point.startTimeNanos) / 1000000;
+        const date = format(new Date(timestamp), 'yyyy-MM-dd');
+        const time = format(new Date(timestamp), 'HH:mm');
+
+        const existing = await db.vitals.where({ date, time, type: 'heart_rate' }).first();
+        if (!existing) {
+          await db.vitals.add(withSyncMeta({
+            date,
+            time,
+            type: 'heart_rate',
+            value1: value,
+            unit: 'BPM',
+            source: 'google_fit'
+          }) as Vital);
+        }
       }
     }
   }
 }
 
 async function syncSleep(accessToken: string, startTime: number, endTime: number) {
+  console.log('[GoogleFit] Syncing sleep sessions...');
   const response = await axios.get(
     `${GOOGLE_FIT_BASE_URL}/sessions?startTime=${new Date(startTime).toISOString()}&endTime=${new Date(endTime).toISOString()}&activityType=72`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+
+  if (!response.data.session) return;
 
   for (const session of response.data.session) {
     const date = format(new Date(parseInt(session.startTimeMillis)), 'yyyy-MM-dd');
@@ -164,7 +169,7 @@ async function syncSleep(accessToken: string, startTime: number, endTime: number
         date,
         bedtime,
         wakeTime,
-        quality: Math.min(Math.round(durationHours * 10), 100), // Mock quality based on duration
+        quality: Math.min(Math.round(durationHours * 10), 100),
         source: 'google_fit'
       }) as SleepLog);
     }
@@ -172,6 +177,7 @@ async function syncSleep(accessToken: string, startTime: number, endTime: number
 }
 
 async function syncBloodPressure(accessToken: string, startTime: number, endTime: number) {
+  console.log('[GoogleFit] Syncing blood pressure...');
   const response = await axios.post(
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
@@ -184,30 +190,33 @@ async function syncBloodPressure(accessToken: string, startTime: number, endTime
   );
 
   for (const bucket of response.data.bucket) {
-    const points = bucket.dataset[0].point;
-    if (points.length > 0) {
-      const systolic = points[0].value[0].fpVal;
-      const diastolic = points[0].value[1].fpVal;
-      const date = format(new Date(parseInt(bucket.startTimeMillis)), 'yyyy-MM-dd');
-      const time = format(new Date(parseInt(bucket.startTimeMillis)), 'HH:mm');
-      
-      const existing = await db.vitals.where({ date, time, type: 'blood_pressure' }).first();
-      if (!existing) {
-        await db.vitals.add(withSyncMeta({
-          date,
-          time,
-          type: 'blood_pressure',
-          value1: Math.round(systolic),
-          value2: Math.round(diastolic),
-          unit: 'mmHg',
-          source: 'google_fit'
-        }) as Vital);
+    if (bucket.dataset[0]?.point) {
+      for (const point of bucket.dataset[0].point) {
+        const systolic = Math.round(point.value[0].fpVal || 0);
+        const diastolic = Math.round(point.value[1].fpVal || 0);
+        const timestamp = parseInt(point.startTimeNanos) / 1000000;
+        const date = format(new Date(timestamp), 'yyyy-MM-dd');
+        const time = format(new Date(timestamp), 'HH:mm');
+
+        const existing = await db.vitals.where({ date, time, type: 'blood_pressure' }).first();
+        if (!existing) {
+          await db.vitals.add(withSyncMeta({
+            date,
+            time,
+            type: 'blood_pressure',
+            value1: systolic,
+            value2: diastolic,
+            unit: 'mmHg',
+            source: 'google_fit'
+          }) as Vital);
+        }
       }
     }
   }
 }
 
 async function syncOxygen(accessToken: string, startTime: number, endTime: number) {
+  console.log('[GoogleFit] Syncing oxygen saturation...');
   const response = await axios.post(
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
@@ -220,22 +229,24 @@ async function syncOxygen(accessToken: string, startTime: number, endTime: numbe
   );
 
   for (const bucket of response.data.bucket) {
-    const points = bucket.dataset[0].point;
-    if (points.length > 0) {
-      const oxygen = points[0].value[0].fpVal;
-      const date = format(new Date(parseInt(bucket.startTimeMillis)), 'yyyy-MM-dd');
-      const time = format(new Date(parseInt(bucket.startTimeMillis)), 'HH:mm');
-      
-      const existing = await db.vitals.where({ date, time, type: 'oxygen' }).first();
-      if (!existing) {
-        await db.vitals.add(withSyncMeta({
-          date,
-          time,
-          type: 'oxygen',
-          value1: Math.round(oxygen),
-          unit: '%',
-          source: 'google_fit'
-        }) as Vital);
+    if (bucket.dataset[0]?.point) {
+      for (const point of bucket.dataset[0].point) {
+        const oxygen = Math.round(point.value[0].fpVal || 0);
+        const timestamp = parseInt(point.startTimeNanos) / 1000000;
+        const date = format(new Date(timestamp), 'yyyy-MM-dd');
+        const time = format(new Date(timestamp), 'HH:mm');
+
+        const existing = await db.vitals.where({ date, time, type: 'oxygen' }).first();
+        if (!existing) {
+          await db.vitals.add(withSyncMeta({
+            date,
+            time,
+            type: 'oxygen',
+            value1: oxygen,
+            unit: '%',
+            source: 'google_fit'
+          }) as Vital);
+        }
       }
     }
   }

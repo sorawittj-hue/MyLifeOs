@@ -17,6 +17,7 @@ const HabitTracker = React.lazy(() => import('./components/HabitTracker'));
 const SleepTracker = React.lazy(() => import('./components/SleepTracker'));
 const SettingsScreen = React.lazy(() => import('./components/Settings'));
 const Profile = React.lazy(() => import('./components/Profile'));
+const DebugSync = React.lazy(() => import('./components/DebugSync'));
 
 // ── Route Loading Fallback ───────────────────────────────────
 function RouteLoadingFallback() {
@@ -169,6 +170,7 @@ export default function App() {
               <Route path="/settings" element={<ErrorBoundary><SettingsScreen /></ErrorBoundary>} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/api/auth/callback" element={<AuthCallback />} />
+              <Route path="/debug" element={<ErrorBoundary><DebugSync /></ErrorBoundary>} />
             </Routes>
           </Suspense>
         </AnimatePresence>
