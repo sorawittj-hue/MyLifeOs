@@ -111,6 +111,13 @@ export function useHealthAutoSync() {
       console.error(`[HealthAutoSync] ✗ Sync failed (${reason}):`, err);
       emitSyncStatus({ status: 'error', lastSyncAt: now, error: err?.message });
 
+      if (err?.message === 'TOKEN_EXPIRED_NO_REFRESH' || err?.message === 'TOKEN_REFRESH_FAILED' || err?.response?.status === 401) {
+        alert('Google Fit Session Expired: กรุณาเชื่อมต่อ Google Fit ใหม่อีกครั้งในการตั้งค่า');
+        // Optional: clear tokens
+        // setGoogleFitTokens(null); 
+        return; // Don't retry if auth is broken
+      }
+
       // Auto-retry with exponential backoff
       if (retryCountRef.current < MAX_RETRIES) {
         retryCountRef.current++;
@@ -137,8 +144,8 @@ export function useHealthAutoSync() {
         // Switch to aggressive polling when visible
         resetPollInterval(ACTIVE_POLL_MS);
       } else {
-        // Switch to lazy polling when hidden (save battery)
-        resetPollInterval(BG_POLL_MS);
+        // Stop fetching when hidden to save API quota and battery
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);

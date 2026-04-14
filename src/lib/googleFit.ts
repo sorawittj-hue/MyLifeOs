@@ -161,11 +161,11 @@ export async function fetchGoogleFitData(
         setTokens({ ...tokens, ...response.data });
       } catch (error) {
         console.error('[GoogleFit] Failed to refresh token:', error);
-        return;
+        throw new Error('TOKEN_REFRESH_FAILED');
       }
     } else {
       console.error('[GoogleFit] Token expired and no refresh token available');
-      return;
+      throw new Error('TOKEN_EXPIRED_NO_REFRESH');
     }
   }
 
@@ -269,8 +269,7 @@ async function syncSteps(
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
       aggregateBy: [{
-        dataTypeName: 'com.google.step_count.delta',
-        dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:estimated_steps',
+        dataTypeName: 'com.google.step_count.delta', // Removed dataSourceId to capture Samsung Health and ALL sources
       }],
       bucketByTime: { durationMillis: 86_400_000 },
       startTimeMillis: startTime,
@@ -278,6 +277,11 @@ async function syncSteps(
     },
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
+
+  console.log(`[GoogleFit] Steps (7d) Payload:`, JSON.stringify(response.data));
+  if (!response.data.bucket || response.data.bucket.length === 0) {
+    console.warn(`[GoogleFit] WARNING: Steps (7d) returned an empty array! Check if Samsung Health is syncing to Health Connect.`);
+  }
 
   for (const bucket of response.data.bucket) {
     const date = format(new Date(parseInt(bucket.startTimeMillis)), 'yyyy-MM-dd');
@@ -312,8 +316,7 @@ async function syncLiveSteps(
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
       aggregateBy: [{
-        dataTypeName: 'com.google.step_count.delta',
-        dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:estimated_steps',
+        dataTypeName: 'com.google.step_count.delta', // Capture ALL sources for live steps
       }],
       bucketByTime: { durationMillis: 900_000 }, // 15-minute buckets
       startTimeMillis: startTime,
@@ -365,6 +368,11 @@ async function syncHeartRateIntraDay(
     },
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
+
+  console.log(`[GoogleFit] Heart Rate (Intra-day) Payload:`, JSON.stringify(response.data));
+  if (!response.data.bucket || response.data.bucket.length === 0) {
+    console.warn(`[GoogleFit] WARNING: Heart Rate (Intra) returned an empty array! Ensure permissions to read Heart Rate are granted in Health Connect.`);
+  }
 
   const vitalsToWrite: Array<Omit<Vital, 'id' | 'syncStatus' | 'updatedAt'>> = [];
 
