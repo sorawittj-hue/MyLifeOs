@@ -79,9 +79,6 @@ export default defineConfig(async ({ mode }) => {
     },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
-      headers: {
-        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
-      },
     },
     build: {
       // Enable source maps for debugging in production (optional)
