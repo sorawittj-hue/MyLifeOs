@@ -3,7 +3,7 @@ import {
   Activity, Flame, Droplets, Timer, TrendingDown, Target, Zap, Heart, Moon,
   Wind, Bot, Cloud, CloudOff, Sparkles, ArrowUpRight, GripVertical, Eye, EyeOff,
   Settings2, Sunrise, Sun, Sunset, MoonStar, Trophy, Wifi, WifiOff, Brain,
-  TrendingUp, AlertCircle, ChevronRight, Bolt
+  TrendingUp, AlertCircle, ChevronRight, Bolt, RefreshCw
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,7 +12,8 @@ import {
 } from '../lib/db';
 import { haptics } from '../lib/haptics';
 import { useAppStore, type TabName, type DailyMetrics } from '../lib/store';
-import { format, parse, differenceInMinutes } from 'date-fns';
+import { format, parse, differenceInMinutes, formatDistanceToNow } from 'date-fns';
+import { th } from 'date-fns/locale';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { firebaseService } from '../lib/firebaseService';
@@ -24,6 +25,7 @@ import {
   type RecoveryInput, type StrainInput, type DaySnapshot, type CognitiveInput
 } from '../lib/healthAlgorithms';
 import { generateDailyInsight } from '../lib/gemini';
+import { onSyncStatusChange, type SyncEvent, type SyncStatus as HealthSyncStatus } from '../hooks/useHealthAutoSync';
 import type { HabitCompletion, Habit, Workout } from '../lib/db';
 
 // ── Time-Aware Greeting ──────────────────────────────────────
@@ -248,9 +250,18 @@ export default function Dashboard() {
     isFasting: false
   });
   const [showCustomize, setShowCustomize] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ status: HealthSyncStatus; lastSyncAt: number }>({ status: 'idle', lastSyncAt: 0 });
   const isDark = theme === 'dark';
   const timeOfDay = getTimeOfDay();
   const today = format(new Date(), 'yyyy-MM-dd');
+
+  // ── Live Sync Status Listener ──────────────────────────────
+  useEffect(() => {
+    const unsub = onSyncStatusChange((event: SyncEvent) => {
+      setSyncStatus({ status: event.status, lastSyncAt: event.lastSyncAt });
+    });
+    return unsub;
+  }, []);
 
   // ── Firebase real-time subscriptions (authenticated users only) ────
   useEffect(() => {
@@ -356,7 +367,13 @@ export default function Dashboard() {
       } catch (e) { console.error('Sleep calc error:', e); }
     }
 
-    const heartRate = vitals.find(v => v.type === 'heart_rate')?.value1 || 72;
+    // Extract real sensor data from vitals (synced from Samsung + Aolon via Google Fit)
+    const hrVitals = vitals.filter(v => v.type === 'heart_rate');
+    const latestHR = hrVitals.find(v => !(v as any).notes)?.value1 || 72;
+    // Real Resting HR from Google Fit sync (tagged with notes='resting')
+    const restingHR = hrVitals.find(v => (v as any).notes === 'resting')?.value1 || latestHR;
+    // Real HRV from Google Fit sync (tagged with notes='hrv_rmssd')
+    const realHRV = hrVitals.find(v => (v as any).notes === 'hrv_rmssd')?.value1 || null;
     const stepsCount = stepLog?.count || 0;
 
     setStats({
@@ -367,7 +384,7 @@ export default function Dashboard() {
       weightHistory: weights.map(w => ({ date: format(new Date(w.date), 'MM/dd'), weight: w.weightKg })),
       sleep: parseFloat(sleepHours.toFixed(1)),
       sleepQuality,
-      heartRate,
+      heartRate: latestHR,
       steps: stepsCount,
       fastingProtocol: activeFasting?.protocol || '--',
       isFasting: !!activeFasting,
@@ -376,12 +393,12 @@ export default function Dashboard() {
     setIsLoading(false);
     requestAnimationFrame(() => requestAnimationFrame(() => setChartReady(true)));
 
-    // ── Recovery & Strain ──────────────────────────────────
+    // ── Recovery & Strain (using REAL sensor data) ──────────
     const recoveryInput: RecoveryInput = {
       sleepDurationHours: sleepHours,
       sleepQuality,
-      restingHeartRate: heartRate,
-      hrv: null,
+      restingHeartRate: restingHR,
+      hrv: realHRV, // Real HRV from Aolon sensor → Samsung Health → Google Fit → LifeOS
     };
     const strainInput: StrainInput = {
       workoutDurationMinutes: workouts.reduce((s, w) => s + (w.duration || 0), 0),
@@ -882,7 +899,48 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* ── Sync status — handled automatically by Firebase Offline Persistence ── */}
+      {/* ── Live Sync Status Banner ── */}
+      {isGoogleFitConnected && (
+        <motion.div
+          variants={item}
+          className={`flex items-center gap-3 px-4 py-3 rounded-2xl transition-all ${
+            syncStatus.status === 'syncing'
+              ? isDark ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-cyan-50 border border-cyan-200'
+              : syncStatus.status === 'error'
+              ? isDark ? 'bg-red-500/10 border border-red-500/20' : 'bg-red-50 border border-red-200'
+              : isDark ? 'bg-white/[0.03] border border-white/[0.05]' : 'bg-black/[0.02] border border-black/[0.04]'
+          }`}
+        >
+          {syncStatus.status === 'syncing' ? (
+            <RefreshCw size={14} className="text-cyan-400 animate-spin flex-shrink-0" />
+          ) : syncStatus.status === 'error' ? (
+            <AlertCircle size={14} className="text-red-400 flex-shrink-0" />
+          ) : (
+            <div className="relative flex-shrink-0">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-50" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className={`text-[10px] font-bold uppercase tracking-widest ${
+              syncStatus.status === 'syncing' ? 'text-cyan-400'
+              : syncStatus.status === 'error' ? 'text-red-400'
+              : isDark ? 'text-zinc-500' : 'text-zinc-400'
+            }`}>
+              {syncStatus.status === 'syncing' ? '⚡ กำลังซิงค์ข้อมูลแบบ Real-time...'
+              : syncStatus.status === 'error' ? '⚠️ ซิงค์ล้มเหลว • กำลังลองใหม่...'
+              : syncStatus.lastSyncAt > 0
+              ? `✓ ซิงค์ล่าสุด ${formatDistanceToNow(syncStatus.lastSyncAt, { addSuffix: true, locale: th })}`
+              : '⏳ รอการซิงค์ครั้งแรก...'}
+            </p>
+          </div>
+          <div className={`flex items-center gap-1.5 text-[9px] font-bold uppercase px-2 py-1 rounded-full flex-shrink-0 ${
+            isDark ? 'bg-white/[0.05] text-zinc-500' : 'bg-black/[0.03] text-zinc-400'
+          }`}>
+            <Activity size={10} /> Samsung + Aolon
+          </div>
+        </motion.div>
+      )}
 
       {/* ══════════════════════════════════════════════════════
            WHOOP-STYLE RECOVERY + STRAIN HERO PANEL

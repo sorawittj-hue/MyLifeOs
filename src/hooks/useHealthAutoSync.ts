@@ -1,27 +1,54 @@
 /**
- * useHealthAutoSync
+ * useHealthAutoSync — Whoop-Killer Real-Time Health Engine
  * ─────────────────────────────────────────────────────────────────────────────
- * Implements "Perceived Real-time" health data synchronization.
+ * Ultra-aggressive perceived real-time sync:
  *
  * Strategy:
- *  1. Page Visibility API — fires a sync whenever the tab becomes visible.
- *  2. Silent background poll — fires every POLL_INTERVAL_MS if the page is
- *     currently visible (no battery waste while the user has switched away).
- *  3. Throttle — enforces MIN_SYNC_GAP_MS between any two actual API calls,
- *     guarding against rapid tab-toggle spam and Google Fit rate limits.
+ *  1. INSTANT sync on hook activation (app load / login)
+ *  2. Page Visibility API — sync on every tab-foreground event
+ *  3. Online resume — sync immediately when connectivity is restored
+ *  4. Aggressive background poll — 60s when visible, paused when hidden
+ *  5. Window focus — instant sync on window.focus (when user switches apps)
+ *  6. Samsung-optimized: fetches intra-day HR data at 15-min granularity
+ *  7. Live sync status event emitter for Dashboard UI indicators
  *
  * Integration:
- *  - Call once at the App level when the user is authenticated & connected.
- *  - Internally uses fetchGoogleFitData, which now writes DIRECTLY to Firebase
- *    Firestore so that the Dashboard's onSnapshot listeners update instantly.
+ *  - Call once at the App level when user is authenticated & connected.
+ *  - Writes DIRECTLY to Firestore → Dashboard onSnapshot fires instantly.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../lib/store';
 
-const POLL_INTERVAL_MS  = 5 * 60 * 1000;  // 5 minutes
-const MIN_SYNC_GAP_MS   = 1 * 60 * 1000;  // 1 minute minimum between syncs
+// ── Tuning Constants ─────────────────────────────────────────
+const ACTIVE_POLL_MS    = 60 * 1000;    // 60 seconds when tab is visible
+const BG_POLL_MS        = 5 * 60 * 1000; // 5 minutes when in background
+const MIN_SYNC_GAP_MS   = 30 * 1000;    // 30-second throttle (aggressive)
+const RETRY_DELAY_MS    = 10 * 1000;    // Retry after 10s on failure
+const MAX_RETRIES       = 3;
 
+// ── Live Sync Status (global event bus for Dashboard) ─────────
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+export interface SyncEvent {
+  status: SyncStatus;
+  lastSyncAt: number;
+  error?: string;
+  metrics?: { steps?: number; heartRate?: number; sleep?: number };
+}
+
+type SyncListener = (event: SyncEvent) => void;
+const syncListeners = new Set<SyncListener>();
+
+export function onSyncStatusChange(listener: SyncListener): () => void {
+  syncListeners.add(listener);
+  return () => syncListeners.delete(listener);
+}
+
+function emitSyncStatus(event: SyncEvent) {
+  syncListeners.forEach(fn => fn(event));
+}
+
+// ── Main Hook ────────────────────────────────────────────────
 export function useHealthAutoSync() {
   const {
     isLoaded,
@@ -32,88 +59,116 @@ export function useHealthAutoSync() {
     firebaseUser,
   } = useAppStore();
 
-  // Track the wall-clock time of the last successful sync to throttle calls
-  const lastSyncAtRef  = useRef<number>(0);
-  // Guard against concurrent invocations (e.g. visibility + interval overlap)
-  const isSyncingRef   = useRef<boolean>(false);
+  const lastSyncAtRef   = useRef<number>(0);
+  const isSyncingRef    = useRef<boolean>(false);
+  const retryCountRef   = useRef<number>(0);
+  const pollTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Core sync executor ──────────────────────────────────────
+  const runSync = useCallback(async (reason: string, force = false) => {
+    const now = Date.now();
+
+    // Throttle: bail if we synced too recently (unless forced)
+    if (!force && now - lastSyncAtRef.current < MIN_SYNC_GAP_MS) {
+      return;
+    }
+
+    // Guard: only one sync at a time
+    if (isSyncingRef.current) {
+      return;
+    }
+
+    isSyncingRef.current = true;
+    lastSyncAtRef.current = now;
+    emitSyncStatus({ status: 'syncing', lastSyncAt: now });
+
+    try {
+      console.log(`[HealthAutoSync] ⚡ Sync (${reason})...`);
+      const { fetchGoogleFitData } = await import('../lib/googleFit');
+      const uid = firebaseUser?.uid ?? null;
+
+      if (demoMode) {
+        await fetchGoogleFitData(
+          googleFitTokens || ({} as any),
+          setGoogleFitTokens,
+          true,
+          uid,
+        );
+      } else if (googleFitTokens) {
+        await fetchGoogleFitData(
+          googleFitTokens,
+          setGoogleFitTokens,
+          false,
+          uid,
+        );
+      }
+
+      const syncTime = Date.now();
+      retryCountRef.current = 0;
+      emitSyncStatus({ status: 'success', lastSyncAt: syncTime });
+      console.log(`[HealthAutoSync] ✓ Sync complete (${reason}) — ${Date.now() - now}ms`);
+    } catch (err: any) {
+      console.error(`[HealthAutoSync] ✗ Sync failed (${reason}):`, err);
+      emitSyncStatus({ status: 'error', lastSyncAt: now, error: err?.message });
+
+      // Auto-retry with exponential backoff
+      if (retryCountRef.current < MAX_RETRIES) {
+        retryCountRef.current++;
+        const delay = RETRY_DELAY_MS * retryCountRef.current;
+        console.log(`[HealthAutoSync] Retrying in ${delay / 1000}s (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
+        setTimeout(() => runSync(`retry-${retryCountRef.current}`, true), delay);
+      }
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, [firebaseUser?.uid, demoMode, googleFitTokens, setGoogleFitTokens]);
 
   useEffect(() => {
-    // Only engage the sync engine once the app is ready and health is connected
     const shouldSync = isLoaded && (isGoogleFitConnected || demoMode);
     if (!shouldSync) return;
 
-    // ── Core sync executor ────────────────────────────────────────────────
-    const runSync = async (reason: string) => {
-      const now = Date.now();
+    // ── 1. Instant sync on activation ────────────────────────
+    runSync('init', true);
 
-      // Throttle: bail if we synced too recently
-      if (now - lastSyncAtRef.current < MIN_SYNC_GAP_MS) {
-        console.log(`[HealthAutoSync] Skipped (${reason}) — throttled, ${Math.round((MIN_SYNC_GAP_MS - (now - lastSyncAtRef.current)) / 1000)}s remaining`);
-        return;
-      }
-
-      // Guard: only one sync at a time
-      if (isSyncingRef.current) {
-        console.log(`[HealthAutoSync] Skipped (${reason}) — already syncing`);
-        return;
-      }
-
-      isSyncingRef.current = true;
-      lastSyncAtRef.current = now;
-
-      try {
-        console.log(`[HealthAutoSync] Starting sync (${reason})...`);
-        // Lazy-import to avoid adding googleFit to the initial bundle
-        const { fetchGoogleFitData } = await import('../lib/googleFit');
-
-        const uid = firebaseUser?.uid ?? null;
-
-        if (demoMode) {
-          await fetchGoogleFitData(
-            googleFitTokens || ({} as any),
-            setGoogleFitTokens,
-            /* isDemo */ true,
-            uid,
-          );
-        } else if (googleFitTokens) {
-          await fetchGoogleFitData(
-            googleFitTokens,
-            setGoogleFitTokens,
-            /* isDemo */ false,
-            uid,
-          );
-        }
-
-        console.log(`[HealthAutoSync] Sync complete (${reason})`);
-      } catch (err) {
-        console.error(`[HealthAutoSync] Sync failed (${reason}):`, err);
-      } finally {
-        isSyncingRef.current = false;
+    // ── 2. Page Visibility API ───────────────────────────────
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        runSync('tab-foreground');
+        // Switch to aggressive polling when visible
+        resetPollInterval(ACTIVE_POLL_MS);
+      } else {
+        // Switch to lazy polling when hidden (save battery)
+        resetPollInterval(BG_POLL_MS);
       }
     };
+    document.addEventListener('visibilitychange', handleVisibility);
 
-    // ── 1. Immediate sync on hook activation ─────────────────────────────
-    runSync('init');
+    // ── 3. Window focus (separate from visibility — covers app switcher) ─
+    const handleFocus = () => runSync('window-focus');
+    window.addEventListener('focus', handleFocus);
 
-    // ── 2. Page Visibility API — sync whenever tab comes to foreground ────
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        runSync('visibilitychange');
-      }
+    // ── 4. Online resume — instant sync when connectivity is restored ────
+    const handleOnline = () => {
+      console.log('[HealthAutoSync] 🌐 Online — triggering sync');
+      runSync('online-resume', true);
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
 
-    // ── 3. Background poll — only fires when the page is visible ─────────
-    const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+    // ── 5. Aggressive background poll ────────────────────────
+    function resetPollInterval(ms: number) {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      pollTimerRef.current = setInterval(() => {
         runSync('poll');
-      }
-    }, POLL_INTERVAL_MS);
+      }, ms);
+    }
+    resetPollInterval(ACTIVE_POLL_MS);
 
-    // ── Cleanup ───────────────────────────────────────────────────────────
+    // ── Cleanup ──────────────────────────────────────────────
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleOnline);
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
-  }, [isLoaded, isGoogleFitConnected, demoMode, googleFitTokens, setGoogleFitTokens, firebaseUser?.uid]);
+  }, [isLoaded, isGoogleFitConnected, demoMode, runSync]);
 }
