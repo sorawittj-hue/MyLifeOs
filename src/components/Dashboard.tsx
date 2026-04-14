@@ -217,7 +217,8 @@ export default function Dashboard() {
     user, theme, activeTab, setActiveTab, isGoogleFitConnected, firebaseUser,
     dashboardWidgets, reorderDashboardWidget, toggleDashboardWidget,
     isOnline,
-    dailyMetrics, setDailyMetrics
+    dailyMetrics, setDailyMetrics,
+    googleFitTokens, setGoogleFitTokens, demoMode
   } = useAppStore();
   const navigate = useNavigate();
   const aiCalledRef = useRef<string>(''); // tracks date AI was last called
@@ -871,7 +872,6 @@ export default function Dashboard() {
   const rec = dailyMetrics?.recovery;
   const str = dailyMetrics?.strain;
   const correlations = dailyMetrics?.habitCorrelations || [];
-  const { googleFitTokens, setGoogleFitTokens, demoMode } = useAppStore();
 
   const handleManualSync = async () => {
     if (!googleFitTokens && !demoMode) return;
