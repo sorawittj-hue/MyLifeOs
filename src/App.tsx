@@ -38,6 +38,26 @@ function RouteLoadingFallback() {
     </div>
   );
 }
+function AuthCallback() {
+  useEffect(() => {
+    // Force a full page reload to the API endpoint to bypass client-side routing
+    const search = window.location.search;
+    window.location.href = `/api/auth/callback${search}`;
+  }, []);
+
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center p-8 bg-zinc-900/50 backdrop-blur-xl rounded-[2.5rem] border border-white/10 shadow-2xl">
+        <div className="relative mb-6">
+          <div className="absolute inset-0 bg-green-500/20 blur-2xl rounded-full animate-pulse" />
+          <RefreshCw className="w-12 h-12 animate-spin text-green-500 mx-auto relative" />
+        </div>
+        <h2 className="text-2xl font-bold mb-2 tracking-tight">กำลังยืนยันตัวตน</h2>
+        <p className="text-sm text-zinc-400">ระบบกำลังเชื่อมต่อกับ Google Fit อย่างปลอดภัย</p>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const { activeTab, setActiveTab, isLoaded, loadUser, theme } = useAppStore();
@@ -147,7 +167,7 @@ export default function App() {
               <Route path="/habits" element={<ErrorBoundary><HabitTracker /></ErrorBoundary>} />
               <Route path="/sleep" element={<ErrorBoundary><SleepTracker /></ErrorBoundary>} />
               <Route path="/settings" element={<ErrorBoundary><SettingsScreen /></ErrorBoundary>} />
-              <Route path="/auth/callback" element={<div className="flex items-center justify-center min-h-screen"><div className="text-center p-8 bg-zinc-900 rounded-2xl border border-white/10"><RefreshCw className="w-10 h-10 animate-spin text-green-500 mx-auto mb-4" /><h2 className="text-xl font-bold mb-2">กำลังยืนยันตัวตน...</h2><p className="text-sm text-zinc-400">กรุณารอสักครู่ ระบบกำลังพาคุณกลับไปที่แอป</p></div></div>} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
             </Routes>
           </Suspense>
         </AnimatePresence>
