@@ -20,7 +20,7 @@ import { firebaseService } from '../lib/firebaseService';
 import { where, orderBy, limit } from 'firebase/firestore';
 import { StreakDashboard } from './StreakBadges';
 import {
-  calculateRecoveryScore, calculateStrainScore, computeHabitCorrelations,
+  calculateSleepPerformance, calculateRecoveryScore, calculateStrainScore, computeHabitCorrelations,
   getRecoveryRecommendation, generateAgenticInterventions,
   type RecoveryInput, type StrainInput, type DaySnapshot, type CognitiveInput
 } from '../lib/healthAlgorithms';
@@ -95,7 +95,7 @@ function MetricRingCard({
 }: {
   value: number; maxValue: number; label: string; labelTh: string;
   score: number; zone: string; gradientFrom: string; gradientTo: string;
-  color: string; isDark: boolean; side: 'recovery' | 'strain'; isLoading: boolean;
+  color: string; isDark: boolean; side: 'recovery' | 'strain' | 'sleep'; isLoading: boolean;
 }) {
   const pct = Math.round((value / maxValue) * 100);
 
@@ -104,7 +104,7 @@ function MetricRingCard({
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5, type: 'spring', stiffness: 120, damping: 18 }}
-      className={`flex-1 rounded-[28px] p-5 flex flex-col items-center gap-3 relative overflow-hidden ${
+      className={`flex-1 rounded-[24px] p-4 flex flex-col items-center gap-3 relative overflow-hidden ${
         isDark
           ? 'bg-white/[0.04] border border-white/[0.07]'
           : 'bg-white border border-black/[0.05] shadow-sm'
@@ -115,19 +115,19 @@ function MetricRingCard({
       <div
         className="absolute inset-0 opacity-[0.08] pointer-events-none"
         style={{
-          background: `radial-gradient(circle at ${side === 'recovery' ? '30%' : '70%'} 40%, ${color}, transparent 70%)`
+          background: `radial-gradient(circle at ${side === 'recovery' ? '20%' : side === 'strain' ? '50%' : '80%'} 40%, ${color}, transparent 70%)`
         }}
       />
 
-      <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+      <p className={`text-[9px] font-black uppercase tracking-[0.1em] text-center ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
         {label}
       </p>
 
       <div className="relative z-10">
         <ProgressRing
           progress={pct}
-          size={130}
-          stroke={10}
+          size={84}
+          stroke={7}
           color={gradientFrom}
           color2={gradientTo}
           bgColor={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}
@@ -135,14 +135,14 @@ function MetricRingCard({
         >
           <div className="text-center">
             {isLoading ? (
-              <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin" style={{ color }} />
+              <div className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" style={{ color }} />
             ) : (
               <>
-                <p className="text-3xl font-black tabular-nums leading-none" style={{ color }}>
+                <p className="text-2xl font-black tabular-nums leading-none" style={{ color }}>
                   {value}
                 </p>
-                <p className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  {side === 'recovery' ? '/ 100' : '/ 21'}
+                <p className={`text-[8px] font-bold uppercase tracking-wider mt-0.5 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  {side === 'strain' ? '/ 21' : '/ 100'}
                 </p>
               </>
             )}
@@ -152,13 +152,13 @@ function MetricRingCard({
 
       <div className="text-center z-10">
         <div
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider whitespace-nowrap"
           style={{ backgroundColor: `${color}20`, color }}
         >
-          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />
+          <div className="w-1 h-1 rounded-full animate-pulse" style={{ backgroundColor: color }} />
           {labelTh}
         </div>
-        <p className={`text-[10px] mt-1.5 font-semibold ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
+        <p className={`text-[9px] mt-1.5 font-semibold line-clamp-1 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
           {zone}
         </p>
       </div>
@@ -413,6 +413,7 @@ export default function Dashboard() {
 
     const recovery = calculateRecoveryScore(recoveryInput);
     const strain = calculateStrainScore(strainInput, cognitiveInput);
+    const sleepPerformance = calculateSleepPerformance(sleepHours, 10, 0); // Need real values of previous day strain if available
 
     // ── Habit correlations (last 14 days) ──────────────────────
     const last14Days: DaySnapshot[] = [];
@@ -441,7 +442,7 @@ export default function Dashboard() {
     const agenticInterventions = generateAgenticInterventions(recovery, strain);
 
     const metrics: DailyMetrics = {
-      recovery, strain, habitCorrelations, agenticInterventions,
+      recovery, strain, sleepPerformance, habitCorrelations, agenticInterventions,
       aiInsight: getRecoveryRecommendation(recovery, strain),
       lastUpdated: today,
     };
@@ -956,8 +957,8 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Recovery + Strain dual ring */}
-        <div className="flex gap-3">
+        {/* Core Metrics: Recovery, Strain, Sleep Performance rings */}
+        <div className="flex gap-2">
           <MetricRingCard
             value={rec?.score ?? 0}
             maxValue={100}
@@ -975,15 +976,29 @@ export default function Dashboard() {
           <MetricRingCard
             value={str?.score ?? 0}
             maxValue={21}
-            label="Allostatic Load"
+            label="Strain"
             labelTh={str?.zoneTh ?? 'คำนวณ...'}
             score={str?.score ?? 0}
-            zone={str ? `Physical ${str.physicalScore} / Cognitive ${str.cognitiveScore}` : '--'}
+            zone={str ? `Phy ${str.physicalScore} / Cog ${str.cognitiveScore}` : '--'}
             gradientFrom={str?.gradientFrom ?? '#6b7280'}
             gradientTo={str?.gradientTo ?? '#9ca3af'}
             color={str?.color ?? '#6b7280'}
             isDark={isDark}
             side="strain"
+            isLoading={isMetricsLoading}
+          />
+          <MetricRingCard
+            value={dailyMetrics?.sleepPerformance?.score ?? 0}
+            maxValue={100}
+            label="Sleep Perf"
+            labelTh={dailyMetrics?.sleepPerformance?.labelTh ?? 'คำนวณ...'}
+            score={dailyMetrics?.sleepPerformance?.score ?? 0}
+            zone={dailyMetrics?.sleepPerformance ? `${dailyMetrics.sleepPerformance.actualSleep}h / ${dailyMetrics.sleepPerformance.sleepNeed}h` : '--'}
+            gradientFrom={dailyMetrics?.sleepPerformance?.gradientFrom ?? '#6b7280'}
+            gradientTo={dailyMetrics?.sleepPerformance?.gradientTo ?? '#9ca3af'}
+            color={dailyMetrics?.sleepPerformance?.color ?? '#6b7280'}
+            isDark={isDark}
+            side="sleep"
             isLoading={isMetricsLoading}
           />
         </div>

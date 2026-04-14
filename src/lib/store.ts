@@ -6,7 +6,7 @@ import { auth, googleProvider } from './firebase';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { firebaseService } from './firebaseService';
 import { registerForPushNotifications } from './notifications';
-import { type RecoveryResult, type StrainResult, type HabitCorrelation, type AgenticIntervention } from './healthAlgorithms';
+import { type RecoveryResult, type StrainResult, type SleepPerformanceResult, type HabitCorrelation, type AgenticIntervention } from './healthAlgorithms';
 
 export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings';
 
@@ -27,6 +27,7 @@ const DEFAULT_DASHBOARD_WIDGETS: DashboardWidget[] = [
 export interface DailyMetrics {
   recovery: RecoveryResult | null;
   strain: StrainResult | null;
+  sleepPerformance: SleepPerformanceResult | null;
   habitCorrelations: HabitCorrelation[];
   agenticInterventions?: AgenticIntervention[];
   aiInsight: string;

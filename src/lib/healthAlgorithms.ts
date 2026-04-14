@@ -59,6 +59,17 @@ export interface RecoveryResult {
   };
 }
 
+export interface SleepPerformanceResult {
+  score: number; // 0-100%
+  sleepNeed: number; // calculated sleep need in hours
+  actualSleep: number; // actual sleep in hours
+  label: 'Poor' | 'Fair' | 'Good' | 'Optimal';
+  labelTh: string;
+  color: string;
+  gradientFrom: string;
+  gradientTo: string;
+}
+
 export interface StrainResult {
   score: number; // Matches totalAllostaticLoad (for backwards compat)
   physicalScore: number;     // 0-21
@@ -81,6 +92,67 @@ function getZScore(val: number, arr: number[], invert: boolean = false): number 
   if (stdDev === 0) return 0;
   let z = (val - mean) / stdDev;
   return invert ? -z : z; // e.g., higher RHR is worse, so invert Z for score calculation
+}
+
+// ── Sleep Performance Engine ─────────────────────────────────
+
+export function calculateSleepPerformance(
+  actualSleepHours: number,
+  previousStrainScore: number = 10,
+  sleepDebtHours: number = 0
+): SleepPerformanceResult {
+  let sleepNeed = 8.0; // Baseline 8 hours
+  
+  if (previousStrainScore > 10) {
+    sleepNeed += ((previousStrainScore - 10) / 11) * 1.5;
+  }
+  
+  sleepNeed += sleepDebtHours;
+  
+  const score = Math.min(100, Math.max(0, Math.round((actualSleepHours / sleepNeed) * 100)));
+  
+  let label: SleepPerformanceResult['label'];
+  let labelTh: string;
+  let color: string;
+  let gradientFrom: string;
+  let gradientTo: string;
+  
+  if (score >= 85) {
+    label = 'Optimal';
+    labelTh = 'ดีเยี่ยม';
+    color = '#3b82f6'; // Blue
+    gradientFrom = '#2563eb';
+    gradientTo = '#60a5fa';
+  } else if (score >= 70) {
+    label = 'Good';
+    labelTh = 'ดี';
+    color = '#14b8a6'; // Teal
+    gradientFrom = '#0d9488';
+    gradientTo = '#2dd4bf';
+  } else if (score >= 50) {
+    label = 'Fair';
+    labelTh = 'พอใช้';
+    color = '#f59e0b'; // Amber
+    gradientFrom = '#d97706';
+    gradientTo = '#fbbf24';
+  } else {
+    label = 'Poor';
+    labelTh = 'ควรปรับปรุง';
+    color = '#ef4444'; // Red
+    gradientFrom = '#dc2626';
+    gradientTo = '#f87171';
+  }
+  
+  return {
+    score, 
+    sleepNeed: parseFloat(sleepNeed.toFixed(1)), 
+    actualSleep: parseFloat(actualSleepHours.toFixed(1)),
+    label, 
+    labelTh, 
+    color, 
+    gradientFrom, 
+    gradientTo
+  };
 }
 
 // ── Recovery Score Engine ────────────────────────────────────
