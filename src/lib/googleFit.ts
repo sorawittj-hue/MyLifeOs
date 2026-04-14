@@ -66,25 +66,33 @@ export async function fetchGoogleFitData(tokens: GoogleFitTokens, setTokens: (t:
       { name: 'Oxygen Saturation', task: syncOxygen(accessToken, sevenDaysAgo, now) },
     ];
 
-    await Promise.all(syncTasks.map(t => t.task.catch(e => {
-      console.error(`Error syncing ${t.name}:`, e);
-    })));
+    console.log('[GoogleFit] Starting sync tasks for', syncTasks.length, 'metrics');
+    await Promise.all(syncTasks.map(t => t.task
+      .then(() => console.log(`[GoogleFit] Successfully synced ${t.name}`))
+      .catch(e => {
+        console.error(`[GoogleFit] Error syncing ${t.name}:`, e.response?.data || e.message);
+      })
+    ));
+    console.log('[GoogleFit] All sync tasks completed');
   } catch (error) {
-    console.error('General sync error:', error);
+    console.error('[GoogleFit] General sync error:', error);
   }
 }
 
 async function syncSteps(accessToken: string, startTime: number, endTime: number) {
+  console.log('[GoogleFit] Syncing steps from', format(startTime, 'yyyy-MM-dd HH:mm'));
   const response = await axios.post(
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
-      aggregateBy: [{ dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:estimated_steps' }],
+      aggregateBy: [{ dataTypeName: 'com.google.step_count.delta' }],
       bucketByTime: { durationMillis: 86400000 }, // 1 day
       startTimeMillis: startTime,
       endTimeMillis: endTime,
     },
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+
+  console.log('[GoogleFit] Steps buckets received:', response.data.bucket?.length || 0);
 
   for (const bucket of response.data.bucket) {
     const date = format(new Date(parseInt(bucket.startTimeMillis)), 'yyyy-MM-dd');
@@ -102,6 +110,7 @@ async function syncSteps(accessToken: string, startTime: number, endTime: number
 }
 
 async function syncHeartRate(accessToken: string, startTime: number, endTime: number) {
+  console.log('[GoogleFit] Syncing heart rate...');
   const response = await axios.post(
     `${GOOGLE_FIT_BASE_URL}/dataset:aggregate`,
     {
@@ -112,6 +121,7 @@ async function syncHeartRate(accessToken: string, startTime: number, endTime: nu
     },
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+  console.log('[GoogleFit] Heart rate buckets received:', response.data.bucket?.length || 0);
 
   for (const bucket of response.data.bucket) {
     const points = bucket.dataset[0].point;
