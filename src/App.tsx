@@ -1,7 +1,7 @@
 import React, { useEffect, Suspense } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { type TabName } from './lib/store';
-import { Home, Utensils, Dumbbell, BarChart3, User, Timer, CheckSquare, Moon, Bot, Settings } from 'lucide-react';
+import { Home, Utensils, Dumbbell, BarChart3, User, Timer, CheckSquare, Moon, Bot, Settings, RefreshCw } from 'lucide-react';
 import { useAppStore } from './lib/store';
 import { haptics } from './lib/haptics';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -147,6 +147,7 @@ export default function App() {
               <Route path="/habits" element={<ErrorBoundary><HabitTracker /></ErrorBoundary>} />
               <Route path="/sleep" element={<ErrorBoundary><SleepTracker /></ErrorBoundary>} />
               <Route path="/settings" element={<ErrorBoundary><SettingsScreen /></ErrorBoundary>} />
+              <Route path="/auth/callback" element={<div className="flex items-center justify-center min-h-screen"><div className="text-center p-8 bg-zinc-900 rounded-2xl border border-white/10"><RefreshCw className="w-10 h-10 animate-spin text-green-500 mx-auto mb-4" /><h2 className="text-xl font-bold mb-2">กำลังยืนยันตัวตน...</h2><p className="text-sm text-zinc-400">กรุณารอสักครู่ ระบบกำลังพาคุณกลับไปที่แอป</p></div></div>} />
             </Routes>
           </Suspense>
         </AnimatePresence>
