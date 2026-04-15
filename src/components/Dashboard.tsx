@@ -381,9 +381,10 @@ export default function Dashboard() {
 
     // Extract real sensor data from vitals (synced from Samsung + Aolon via Google Fit)
     const hrVitals = vitals.filter(v => v.type === 'heart_rate');
-    const latestHR = hrVitals.find(v => !(v as any).notes)?.value1 || 72;
+    const normalHrVitals = hrVitals.filter(v => !(v as any).notes).sort((a, b) => b.time.localeCompare(a.time));
+    const latestHR = normalHrVitals[0]?.value1 || 72;
     // Real Resting HR from Google Fit sync (tagged with notes='resting')
-    const restingHR = hrVitals.find(v => (v as any).notes === 'resting')?.value1 || latestHR;
+    const restingHR = hrVitals.filter(v => (v as any).notes === 'resting').sort((a, b) => b.time.localeCompare(a.time))[0]?.value1 || latestHR;
     // Real HRV from Google Fit sync (tagged with notes='hrv_rmssd')
     const realHRV = hrVitals.find(v => (v as any).notes === 'hrv_rmssd')?.value1 || null;
     // SpO2 from Google Fit
@@ -1051,17 +1052,26 @@ export default function Dashboard() {
   const str = dailyMetrics?.strain;
   const correlations = dailyMetrics?.habitCorrelations || [];
 
+  const [isManuallySyncing, setIsManuallySyncing] = useState(false);
+
   const handleManualSync = async () => {
     if (!googleFitTokens && !demoMode) return;
+    if (isManuallySyncing) return;
+    setIsManuallySyncing(true);
+    setSyncStatus(prev => ({ ...prev, status: 'syncing' }));
     try {
+      const uid = firebaseUser?.uid ?? null;
       if (demoMode) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        await fetchGoogleFitData(googleFitTokens || {} as any, setGoogleFitTokens, true);
+        await fetchGoogleFitData(googleFitTokens || {} as any, setGoogleFitTokens, true, uid);
       } else {
-        await fetchGoogleFitData(googleFitTokens!, setGoogleFitTokens, false, firebaseUser?.uid);
+        await fetchGoogleFitData(googleFitTokens!, setGoogleFitTokens, false, uid);
       }
+      setSyncStatus({ status: 'success', lastSyncAt: Date.now() });
     } catch (e) {
-      console.error(e);
+      console.error('[ManualSync] Error:', e);
+      setSyncStatus(prev => ({ ...prev, status: 'error' }));
+    } finally {
+      setIsManuallySyncing(false);
     }
   };
 
@@ -1146,6 +1156,24 @@ export default function Dashboard() {
           >
             <Settings2 size={18} />
           </motion.button>
+          {/* Manual Sync Button */}
+          {(isGoogleFitConnected || demoMode) && (
+            <motion.button
+              whileTap={{ scale: 0.85, rotate: 180 }}
+              onClick={() => { haptics.medium(); handleManualSync(); }}
+              disabled={isManuallySyncing}
+              className={`p-3 rounded-2xl transition-all shadow-sm relative ${
+                isManuallySyncing
+                  ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30'
+                  : isDark ? 'bg-white/5 border border-white/10 text-zinc-400 hover:bg-white/10 hover:text-cyan-400' : 'bg-black/[0.03] border border-black/[0.05] text-zinc-500 hover:bg-black/[0.06]'
+              }`}
+            >
+              <RefreshCw size={18} className={isManuallySyncing ? 'animate-spin' : ''} />
+              {isManuallySyncing && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 rounded-full animate-ping" />
+              )}
+            </motion.button>
+          )}
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -1180,18 +1208,19 @@ export default function Dashboard() {
       </header>
 
       {/* ── Live Sync Status Banner ── */}
-      {isGoogleFitConnected && (
+      {(isGoogleFitConnected || demoMode) && (
         <motion.div
           variants={item}
-          className={`flex items-center gap-3 px-4 py-3 rounded-2xl transition-all ${
-            syncStatus.status === 'syncing'
+          onClick={() => { haptics.light(); handleManualSync(); }}
+          className={`flex items-center gap-3 px-4 py-3 rounded-2xl transition-all cursor-pointer active:scale-[0.98] ${
+            syncStatus.status === 'syncing' || isManuallySyncing
               ? isDark ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-cyan-50 border border-cyan-200'
               : syncStatus.status === 'error'
               ? isDark ? 'bg-red-500/10 border border-red-500/20' : 'bg-red-50 border border-red-200'
               : isDark ? 'bg-white/[0.03] border border-white/[0.05]' : 'bg-black/[0.02] border border-black/[0.04]'
           }`}
         >
-          {syncStatus.status === 'syncing' ? (
+          {syncStatus.status === 'syncing' || isManuallySyncing ? (
             <RefreshCw size={14} className="text-cyan-400 animate-spin flex-shrink-0" />
           ) : syncStatus.status === 'error' ? (
             <AlertCircle size={14} className="text-red-400 flex-shrink-0" />
@@ -1203,21 +1232,22 @@ export default function Dashboard() {
           )}
           <div className="flex-1 min-w-0">
             <p className={`text-[10px] font-bold uppercase tracking-widest ${
-              syncStatus.status === 'syncing' ? 'text-cyan-400'
+              syncStatus.status === 'syncing' || isManuallySyncing ? 'text-cyan-400'
               : syncStatus.status === 'error' ? 'text-red-400'
               : isDark ? 'text-zinc-500' : 'text-zinc-400'
             }`}>
-              {syncStatus.status === 'syncing' ? '⚡ กำลังซิงค์ข้อมูลแบบ Real-time...'
-              : syncStatus.status === 'error' ? '⚠️ ซิงค์ล้มเหลว • กำลังลองใหม่...'
+              {syncStatus.status === 'syncing' || isManuallySyncing ? '⚡ กำลังซิงค์ข้อมูลแบบ Real-time...'
+              : syncStatus.status === 'error' ? '⚠️ ซิงค์ล้มเหลว • แตะเพื่อลองใหม่'
               : syncStatus.lastSyncAt > 0
-              ? `✓ ซิงค์ล่าสุด ${formatDistanceToNow(syncStatus.lastSyncAt, { addSuffix: true, locale: th })}`
-              : '⏳ รอการซิงค์ครั้งแรก...'}
+              ? `✓ ซิงค์ล่าสุด ${formatDistanceToNow(syncStatus.lastSyncAt, { addSuffix: true, locale: th })}  •  แตะเพื่อซิงค์`
+              : '⏳ แตะเพื่อซิงค์ข้อมูลจาก Google Fit'}
             </p>
           </div>
           <div className={`flex items-center gap-1.5 text-[9px] font-bold uppercase px-2 py-1 rounded-full flex-shrink-0 ${
             isDark ? 'bg-white/[0.05] text-zinc-500' : 'bg-black/[0.03] text-zinc-400'
           }`}>
-            <Activity size={10} /> Samsung + Aolon
+            <Activity size={10} />
+            {demoMode ? 'Demo' : 'Samsung + Aolon'}
           </div>
         </motion.div>
       )}
@@ -1229,10 +1259,12 @@ export default function Dashboard() {
         <div className="flex items-center justify-between px-1">
           <h2 className={`text-xs font-black uppercase tracking-[0.2em] ${textMuted}`}>วันนี้</h2>
           <button
-            onClick={() => { haptics.light(); navigate('/sleep'); }}
-            className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-zinc-600 hover:text-zinc-400' : 'text-zinc-400 hover:text-zinc-600'} transition-colors flex items-center gap-1`}
+            onClick={() => { haptics.light(); handleManualSync(); }}
+            disabled={isManuallySyncing}
+            className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-cyan-500 hover:text-cyan-400' : 'text-cyan-600 hover:text-cyan-500'} transition-colors flex items-center gap-1`}
           >
-            อัพเดตข้อมูล <ChevronRight size={10} />
+            {isManuallySyncing ? <RefreshCw size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+            {isManuallySyncing ? 'กำลังซิงค์...' : 'ซิงค์ข้อมูล'}
           </button>
         </div>
 
