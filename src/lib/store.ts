@@ -8,6 +8,13 @@ import { firebaseService } from './firebaseService';
 import { registerForPushNotifications } from './notifications';
 import { type RecoveryResult, type StrainResult, type SleepPerformanceResult, type HabitCorrelation, type AgenticIntervention, type ReadinessPrediction } from './healthAlgorithms';
 
+// Global flag for reconnect alert
+declare global {
+  interface Window {
+    __NEEDS_GOOGLE_FIT_RECONNECT?: boolean;
+  }
+}
+
 export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habits' | 'workouts' | 'sleep' | 'coach' | 'profile' | 'settings' | 'journal';
 
 // ── Default Dashboard Widgets ────────────────────────────────
@@ -377,6 +384,16 @@ export const useAppStore = create<AppState>()(
           isGoogleFitConnected: persistedState?.isGoogleFitConnected,
           demoMode: persistedState?.demoMode,
         });
+
+        // Fix state inconsistency: if no tokens, isGoogleFitConnected should be false
+        if (persistedState?.isGoogleFitConnected && !persistedState?.googleFitTokens) {
+          console.warn('[Store] ⚠️ Fixing state inconsistency: isGoogleFitConnected was true but tokens are null');
+          persistedState.isGoogleFitConnected = false;
+          // Show alert on next app load (using a flag)
+          if (typeof window !== 'undefined') {
+            window.__NEEDS_GOOGLE_FIT_RECONNECT = true;
+          }
+        }
 
         const merged = { ...currentState, ...persistedState };
         // Ensure new widget IDs exist in persisted widgets

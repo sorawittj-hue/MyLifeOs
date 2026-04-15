@@ -34,7 +34,7 @@ function RouteLoadingFallback() {
           </div>
         </div>
         <div className="w-20 h-0.5 bg-zinc-800 dark:bg-zinc-800 rounded-full overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]" 
+          <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]"
             style={{ width: '60%' }}
           />
         </div>
@@ -84,6 +84,17 @@ export default function App() {
     loadUser();
   }, []);
 
+  // Check if Google Fit needs to be reconnected
+  useEffect(() => {
+    if (window.__NEEDS_GOOGLE_FIT_RECONNECT) {
+      // Show notification after app loads
+      setTimeout(() => {
+        alert('🔌 Google Fit Session หมดอายุ\n\nกรุณาไปที่ Settings > กด "Connect" Google Fit ใหม่อีกครั้งเพื่อดึงข้อมูลจาก Samsung Watch ของคุณ');
+        window.__NEEDS_GOOGLE_FIT_RECONNECT = false;
+      }, 1000);
+    }
+  }, [isLoaded]);
+
   // ── Privacy Shield (Blur on Background) ────────────────────
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -113,7 +124,7 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#0a0a0a]">
         <div className="flex flex-col items-center gap-6">
           {/* Animated logo */}
-          <motion.div 
+          <motion.div
             className="relative"
             initial={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -124,7 +135,7 @@ export default function App() {
               <span className="text-3xl">🌿</span>
             </div>
           </motion.div>
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.5 }}
@@ -136,13 +147,13 @@ export default function App() {
             <p className="text-xs mt-1 text-zinc-400 dark:text-zinc-600">Health Suite</p>
           </motion.div>
           {/* Loading bar */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5 }}
             className="w-32 h-0.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden"
           >
-            <motion.div 
+            <motion.div
               className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
               initial={{ width: '0%' }}
               animate={{ width: '100%' }}
@@ -186,10 +197,10 @@ export default function App() {
 
   return (
     <div className={`min-h-[100dvh] pb-32 transition-colors duration-500 ${theme === 'dark' ? 'bg-black text-white selection:bg-green-500/30' : 'bg-[#f5f5f7] text-zinc-900 selection:bg-green-500/20'}`}>
-      
+
       {/* Privacy Shield Overlay */}
       {renderPrivacyShieldOverlay()}
-      
+
       {/* Ambient background mesh (dark mode only) */}
       <div className="fixed inset-0 pointer-events-none z-0 mesh-gradient opacity-0 dark:opacity-60" />
 
@@ -224,7 +235,7 @@ export default function App() {
         >
           {/* subtle inner border for glass effect */}
           <div className="absolute inset-0 rounded-[2rem] ring-1 ring-inset ring-white/20 dark:ring-white/5 pointer-events-none" />
-          
+
           <div className="flex justify-around items-center py-2 px-2 relative z-10">
             {navItems.map((item) => {
               const isActive = activeTab === item.id;
@@ -246,36 +257,34 @@ export default function App() {
                     />
                   )}
                   <motion.div
-                    animate={{ 
+                    animate={{
                       scale: isActive ? 1.15 : 1,
                       y: isActive ? -3 : 0,
                     }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   >
-                    <item.icon 
-                      size={22} 
+                    <item.icon
+                      size={22}
                       strokeWidth={isActive ? 2.5 : 2}
-                      className={`transition-colors duration-300 ${
-                        isActive 
+                      className={`transition-colors duration-300 ${isActive
                           ? 'text-green-600 dark:text-green-400 drop-shadow-md'
                           : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400'
-                      }`}
+                        }`}
                     />
                   </motion.div>
-                  <span className={`text-[10px] font-bold tracking-wide transition-colors duration-300 ${
-                    isActive 
+                  <span className={`text-[10px] font-bold tracking-wide transition-colors duration-300 ${isActive
                       ? 'text-green-600 dark:text-green-400 opacity-100'
                       : 'text-zinc-400 dark:text-zinc-500 opacity-0 absolute translate-y-4' // Hide text when inactive for cleaner look
-                  }`}>
+                    }`}>
                     {item.label}
                   </span>
                 </button>
               );
             })}
-            
+
             {/* More Menu Button */}
             <div className="relative">
-              <button 
+              <button
                 onClick={() => {
                   haptics.light();
                   setShowMore(!showMore);
@@ -295,15 +304,15 @@ export default function App() {
                   </div>
                 </motion.div>
               </button>
-              
+
               {/* Popover Menu */}
               <AnimatePresence>
                 {showMore && (
                   <>
                     {/* Invisible backdrop just for clicking away */}
                     <div className="fixed inset-0 z-40" onClick={() => setShowMore(false)} />
-                    
-                    <motion.div 
+
+                    <motion.div
                       initial={{ opacity: 0, y: 20, scale: 0.9, filter: 'blur(10px)' }}
                       animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
                       exit={{ opacity: 0, y: 20, scale: 0.9, filter: 'blur(10px)' }}
@@ -322,11 +331,10 @@ export default function App() {
                             navigate(item.path);
                             setShowMore(false);
                           }}
-                          className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
-                            activeTab === item.id 
-                              ? 'bg-green-500 text-black shadow-lg shadow-green-500/20' 
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${activeTab === item.id
+                              ? 'bg-green-500 text-black shadow-lg shadow-green-500/20'
                               : 'text-zinc-600 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/[0.08]'
-                          }`}
+                            }`}
                         >
                           <item.icon size={18} strokeWidth={activeTab === item.id ? 2.5 : 2} />
                           <span className="text-sm font-bold tracking-wide">{item.label}</span>
