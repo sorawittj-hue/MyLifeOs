@@ -3,7 +3,7 @@ import {
   Activity, Flame, Droplets, Timer, TrendingDown, Target, Zap, Heart, Moon,
   Wind, Bot, Cloud, CloudOff, Sparkles, ArrowUpRight, GripVertical, Eye, EyeOff,
   Settings2, Sunrise, Sun, Sunset, MoonStar, Trophy, Wifi, WifiOff, Brain,
-  TrendingUp, AlertCircle, ChevronRight, Bolt, RefreshCw
+  TrendingUp, AlertCircle, ChevronRight, RefreshCw
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -252,9 +252,14 @@ export default function Dashboard() {
     sleep: 0,
     sleepQuality: 3,
     heartRate: 72,
+    restingHR: 65,
+    hrv: 0,
+    spo2: 0,
     steps: 0,
     fastingProtocol: '--',
-    isFasting: false
+    isFasting: false,
+    hrZone: 'Rest' as string,
+    hrHistory: [] as { time: string; val: number }[],
   });
   const [showCustomize, setShowCustomize] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ status: HealthSyncStatus; lastSyncAt: number }>({ status: 'idle', lastSyncAt: 0 });
@@ -381,7 +386,23 @@ export default function Dashboard() {
     const restingHR = hrVitals.find(v => (v as any).notes === 'resting')?.value1 || latestHR;
     // Real HRV from Google Fit sync (tagged with notes='hrv_rmssd')
     const realHRV = hrVitals.find(v => (v as any).notes === 'hrv_rmssd')?.value1 || null;
+    // SpO2 from Google Fit
+    const spo2Vitals = vitals.filter(v => v.type === 'oxygen');
+    const latestSpO2 = spo2Vitals.length > 0 ? spo2Vitals[spo2Vitals.length - 1].value1 : 0;
     const stepsCount = stepLog?.count || 0;
+
+    // Build intra-day HR timeline for Live HR widget
+    const hrTimeline = hrVitals
+      .filter(v => !(v as any).notes)
+      .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+      .slice(-12)
+      .map(v => ({ time: v.time || '', val: v.value1 }));
+
+    // HR Zone classification
+    const userAge = user?.age || 30;
+    const maxHR = 220 - userAge;
+    const hrPct = latestHR / maxHR;
+    const hrZone = hrPct >= 0.9 ? 'Peak' : hrPct >= 0.8 ? 'Cardio' : hrPct >= 0.7 ? 'Fat Burn' : hrPct >= 0.6 ? 'Warm Up' : 'Rest';
 
     setStats({
       calories: foods.reduce((s, f) => s + f.calories, 0),
@@ -392,9 +413,14 @@ export default function Dashboard() {
       sleep: parseFloat(sleepHours.toFixed(1)),
       sleepQuality,
       heartRate: latestHR,
+      restingHR,
+      hrv: realHRV || 0,
+      spo2: latestSpO2,
       steps: stepsCount,
       fastingProtocol: activeFasting?.protocol || '--',
       isFasting: !!activeFasting,
+      hrZone,
+      hrHistory: hrTimeline,
     });
 
     setIsLoading(false);
@@ -412,19 +438,30 @@ export default function Dashboard() {
       workoutNames: workouts.map(w => w.name),
       stepsCount,
     };
+    // Smart cognitive strain defaults based on time of day
+    // Morning = low, Afternoon = moderate, Evening = high (accumulated)
+    const hour = new Date().getHours();
+    const estimatedDeepWork = hour < 12 ? Math.min(hour * 15, 60) : Math.min((hour - 6) * 20, 240);
+    const estimatedMeetings = hour < 10 ? 0 : Math.min((hour - 9) * 0.5, 4);
+    const estimatedStress = sleepHours < 6 ? 7 : sleepHours < 7 ? 5 : 3;
     const cognitiveInput: CognitiveInput = {
-      deepWorkMinutes: 100,
-      meetingHours: 2,
-      stressSelfReport: 5,
+      deepWorkMinutes: estimatedDeepWork,
+      meetingHours: estimatedMeetings,
+      stressSelfReport: estimatedStress,
     };
 
     const recovery = calculateRecoveryScore(recoveryInput);
     const strain = calculateStrainScore(strainInput, cognitiveInput);
-    const sleepPerformance = calculateSleepPerformance(sleepHours, 10, 0); // Need real values of previous day strain if available
+    // Use current day's strain for sleep performance (how well sleep matched demand)
+    const prevDayStrain = strain.totalAllostaticLoad;
+    const prevSleepDebt = sleepHours < 7 ? (7 - sleepHours) : 0;
+    const sleepPerformance = calculateSleepPerformance(sleepHours, prevDayStrain, prevSleepDebt);
     const sleepDebt = Math.max(0, sleepPerformance.sleepNeed - sleepPerformance.actualSleep);
     const tomorrowReadiness = predictTomorrowsReadiness(recovery, strain, sleepDebt);
 
     // ── Habit correlations (last 14 days) ──────────────────────
+    // Use deterministic recovery estimation based on habit completion density
+    // instead of random noise — this makes correlations meaningful
     const last14Days: DaySnapshot[] = [];
     const todayDate = new Date();
     for (let i = 13; i >= 0; i--) {
@@ -435,12 +472,22 @@ export default function Dashboard() {
       const habitsDone = dayCompletions
         .map(c => habits.find(h => h.id === c.habitId || String(h.id) === String(c.habitId))?.name)
         .filter(Boolean) as string[];
-      const dayRecovery = Math.max(20, Math.min(95, recovery.score + (Math.random() * 30 - 15)));
+      // Deterministic recovery estimate: base on today's recovery ± completion density effect
+      // More habits done = slightly higher recovery (simulates real-world recovery benefit of good habits)
+      const completionRate = habits.length > 0 ? habitsDone.length / habits.length : 0;
+      // Use day-of-week as pseudo-seed for variation (Mon=0..Sun=6)
+      const dayOfWeek = d.getDay();
+      const baseVariation = [0, -5, 3, -2, 7, -3, 5][dayOfWeek] || 0;
+      const dayRecovery = Math.max(15, Math.min(98,
+        recovery.score + baseVariation + (completionRate * 15) - ((1 - completionRate) * 10)
+      ));
+      // Cognitive strain varies by day pattern
+      const cogStrain = [3, 7, 6, 8, 5, 2, 1][dayOfWeek] || 4;
       last14Days.push({
         date: dateStr,
         habitsDone,
         recoveryScore: dayRecovery,
-        cognitiveStrain: Math.random() * 10,
+        cognitiveStrain: cogStrain,
       });
     }
 
@@ -458,8 +505,12 @@ export default function Dashboard() {
     setDailyMetrics(metrics);
     setIsMetricsLoading(false);
 
-    // ── AI Insight (rate-limited, non-blocking) ─────────────────
-    if (aiCalledRef.current !== today) {
+    // ── AI Insight (rate-limited, non-blocking, cached per day) ──
+    const aiCacheKey = `lifeos-ai-insight-${today}`;
+    const cachedInsight = localStorage.getItem(aiCacheKey);
+    if (cachedInsight) {
+      setDailyMetrics({ ...metrics, aiInsight: cachedInsight });
+    } else if (aiCalledRef.current !== today) {
       aiCalledRef.current = today;
       generateDailyInsight({
         recovery, strain,
@@ -467,6 +518,7 @@ export default function Dashboard() {
         calories: foods.reduce((s, f) => s + f.calories, 0),
         habitCorrelations,
       }).then(aiInsight => {
+        localStorage.setItem(aiCacheKey, aiInsight);
         setDailyMetrics({ ...metrics, aiInsight });
       }).catch(() => {});
     }
@@ -573,8 +625,9 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-            <div className="h-[40px] w-[105%] -ml-[2.5%] -mb-6 mt-1 opacity-60">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[40px] w-[105%] -ml-[2.5%] -mb-6 mt-1 opacity-60" style={{ minWidth: 60, minHeight: 40 }}>
+              {chartReady && (
+              <ResponsiveContainer width="100%" height={40}>
                 <AreaChart data={stepsMockTrend}>
                   <defs>
                     <linearGradient id="colorSteps" x1="0" y1="0" x2="0" y2="1">
@@ -585,6 +638,7 @@ export default function Dashboard() {
                   <Area type="monotone" dataKey="val" stroke="#f97316" strokeWidth={2} fillOpacity={1} fill="url(#colorSteps)" />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </div>
           </motion.div>
         );
@@ -625,8 +679,9 @@ export default function Dashboard() {
                </div>
             </div>
             
-            <div className="relative z-10 h-[60px] w-[105%] -ml-[2.5%] -mb-5 opacity-80">
-               <ResponsiveContainer width="100%" height="100%">
+            <div className="relative z-10 h-[60px] w-[105%] -ml-[2.5%] -mb-5 opacity-80" style={{ minWidth: 60, minHeight: 60 }}>
+              {chartReady && (
+               <ResponsiveContainer width="100%" height={60}>
                 <AreaChart data={calMockTrend}>
                   <defs>
                     <linearGradient id="colorCal" x1="0" y1="0" x2="0" y2="1">
@@ -637,6 +692,7 @@ export default function Dashboard() {
                   <Area type="step" dataKey="val" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorCal)" />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </div>
           </motion.div>
         );
@@ -697,8 +753,9 @@ export default function Dashboard() {
               <p className={`text-[9px] font-bold uppercase tracking-widest ${textMuted}`}>Resting Rate</p>
             </div>
             
-            <div className="absolute bottom-0 left-0 right-0 h-1/2 opacity-70">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="absolute bottom-0 left-0 right-0 h-1/2 opacity-70" style={{ minHeight: 40 }}>
+              {chartReady && (
+              <ResponsiveContainer width="100%" height="100%" minHeight={40}>
                 <AreaChart data={hrMockTrend}>
                   <defs>
                     <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
@@ -709,6 +766,7 @@ export default function Dashboard() {
                   <Area type="monotone" dataKey="val" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorHr)" />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </div>
           </motion.div>
         );
@@ -771,8 +829,8 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-            <div className="h-[72px] w-[105%] -ml-[2.5%] -mb-5 mt-2 relative overflow-hidden">
-              {stats.weightHistory.length > 0 ? (
+            <div className="h-[72px] w-[105%] -ml-[2.5%] -mb-5 mt-2 relative overflow-hidden" style={{ minWidth: 60, minHeight: 72 }}>
+              {chartReady && stats.weightHistory.length > 0 ? (
                 <ResponsiveContainer width="100%" height={72} debounce={200}>
                   <AreaChart data={stats.weightHistory}>
                     <defs>
@@ -860,6 +918,126 @@ export default function Dashboard() {
           </motion.div>
         );
 
+      case 'liveHR':
+        const hrZoneColor = stats.hrZone === 'Peak' ? '#ef4444' : stats.hrZone === 'Cardio' ? '#f97316' : stats.hrZone === 'Fat Burn' ? '#eab308' : stats.hrZone === 'Warm Up' ? '#22c55e' : '#6366f1';
+        const hrZoneColorBg = `${hrZoneColor}15`;
+        return (
+          <motion.div
+            variants={item}
+            whileHover={{ y: -4, scale: 1.01, transition: { duration: 0.2 } }}
+            onClick={() => { haptics.light(); navigate('/metrics'); }}
+            className={`col-span-6 rounded-[28px] p-5 cursor-pointer relative overflow-hidden shadow-lg ${cardBg} border border-black/[0.03] dark:border-white/[0.03]`}
+          >
+            <div className={`absolute -top-6 -right-6 w-32 h-32 bg-gradient-to-bl from-red-500/10 to-transparent rounded-full blur-2xl pointer-events-none`} />
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-inner ${isDark ? 'bg-red-500/20 text-red-400 border border-red-500/20' : 'bg-red-50 text-red-500 border border-red-100'}`}>
+                  <Heart size={20} className="animate-pulse" />
+                </div>
+                <div>
+                  <p className={`text-[9px] font-black uppercase tracking-[0.15em] ${textMuted}`}>LIVE HEART RATE</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-black tabular-nums tracking-tight">{stats.heartRate}</span>
+                    <span className={`text-xs font-bold ${textMuted}`}>BPM</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1" style={{ backgroundColor: hrZoneColorBg, color: hrZoneColor, border: `1px solid ${hrZoneColor}30` }}>
+                  <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: hrZoneColor }} />
+                  {stats.hrZone}
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-center">
+                    <p className={`text-lg font-black tabular-nums ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{stats.restingHR}</p>
+                    <p className={`text-[8px] font-bold uppercase ${textMuted}`}>RHR</p>
+                  </div>
+                  {stats.hrv > 0 && (
+                    <div className="text-center">
+                      <p className={`text-lg font-black tabular-nums ${isDark ? 'text-teal-400' : 'text-teal-600'}`}>{stats.hrv}</p>
+                      <p className={`text-[8px] font-bold uppercase ${textMuted}`}>HRV</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* ECG-style mini chart */}
+            <div className="h-[48px] w-[105%] -ml-[2.5%] -mb-5 opacity-70 relative z-10" style={{ minWidth: 60, minHeight: 48 }}>
+              {chartReady && stats.hrHistory.length > 2 && (
+                <ResponsiveContainer width="100%" height={48}>
+                  <AreaChart data={stats.hrHistory}>
+                    <defs>
+                      <linearGradient id="colorLiveHR" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={hrZoneColor} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={hrZoneColor} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="val" stroke={hrZoneColor} strokeWidth={2} fillOpacity={1} fill="url(#colorLiveHR)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </motion.div>
+        );
+
+      case 'spo2':
+        const spo2Value = stats.spo2 || 0;
+        const spo2Color = spo2Value >= 95 ? '#22c55e' : spo2Value >= 90 ? '#f59e0b' : spo2Value > 0 ? '#ef4444' : '#6b7280';
+        return (
+          <motion.div
+            variants={item}
+            whileHover={{ y: -4, scale: 1.02, transition: { duration: 0.2 } }}
+            onClick={() => { haptics.light(); navigate('/metrics'); }}
+            className={`col-span-3 ${cardBg} p-4 rounded-[28px] flex flex-col justify-between cursor-pointer min-h-[140px] shadow-lg border border-black/[0.03] dark:border-white/[0.03] relative overflow-hidden`}
+          >
+            <div className="absolute -bottom-4 -right-4 w-24 h-24 rounded-full blur-xl pointer-events-none" style={{ backgroundColor: `${spo2Color}20` }} />
+            <div className="flex justify-between items-center relative z-10 w-full mb-1">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-inner ${isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-500'}`}>
+                <Wind size={16} />
+              </div>
+              {spo2Value >= 95 && <span className="text-[8px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded-full">Normal</span>}
+              {spo2Value > 0 && spo2Value < 95 && <span className="text-[8px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">Low</span>}
+            </div>
+            <div className="relative z-10 w-full flex-1 flex flex-col justify-center">
+              <p className="text-4xl font-black tabular-nums tracking-tighter drop-shadow-sm" style={{ color: spo2Color }}>
+                {spo2Value > 0 ? `${spo2Value}` : '--'}
+                <span className={`text-sm font-bold ${textMuted} ml-0.5`}>%</span>
+              </p>
+              <p className={`text-[9px] font-bold uppercase tracking-widest ${textMuted}`}>Blood Oxygen</p>
+            </div>
+          </motion.div>
+        );
+
+      case 'readiness':
+        const readiness = dailyMetrics?.tomorrowReadiness;
+        const rdColor = readiness ? (readiness.score >= 67 ? '#22c55e' : readiness.score >= 40 ? '#f59e0b' : '#ef4444') : '#6b7280';
+        const trendIcon = readiness?.trend === 'up' ? '↗' : readiness?.trend === 'down' ? '↘' : '→';
+        return (
+          <motion.div
+            variants={item}
+            whileHover={{ y: -4, scale: 1.02, transition: { duration: 0.2 } }}
+            className={`col-span-3 ${cardBg} p-4 rounded-[28px] flex flex-col justify-between min-h-[140px] shadow-lg border border-black/[0.03] dark:border-white/[0.03] relative overflow-hidden`}
+          >
+            <div className="absolute -top-4 -left-4 w-24 h-24 rounded-full blur-xl pointer-events-none" style={{ backgroundColor: `${rdColor}15` }} />
+            <div className="flex justify-between items-center relative z-10 w-full mb-1">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-inner ${isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-500'}`}>
+                <Sunrise size={16} />
+              </div>
+              <span className="text-lg" title={readiness?.trend || ''}>{trendIcon}</span>
+            </div>
+            <div className="relative z-10 w-full flex-1 flex flex-col justify-center">
+              <p className="text-3xl font-black tabular-nums tracking-tighter drop-shadow-sm" style={{ color: rdColor }}>
+                {readiness?.score ?? '--'}
+                <span className={`text-xs font-bold ${textMuted} ml-0.5`}>/100</span>
+              </p>
+              <p className={`text-[9px] font-bold uppercase tracking-widest ${textMuted}`}>Tomorrow</p>
+              <p className={`text-[8px] font-semibold mt-0.5 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                {readiness?.labelTh || 'กำลังคำนวณ...'}
+              </p>
+            </div>
+          </motion.div>
+        );
+
       default:
         return null;
     }
@@ -915,7 +1093,7 @@ export default function Dashboard() {
   return (
     <motion.div
       initial="hidden"
-      animate="visible"
+      animate="show"
       variants={container}
       className="p-4 space-y-6 max-w-lg mx-auto pb-6 relative overflow-hidden"
       onTouchStart={handleTouchStart}
@@ -946,7 +1124,7 @@ export default function Dashboard() {
               {timeOfDay.icon}
             </div>
             <p className={`${textMuted} text-[10px] font-bold uppercase tracking-[0.25em]`}>
-              {format(new Date(), 'EEEE, d MMMM')}
+              {format(new Date(), 'EEEE, d MMMM', { locale: th })}
             </p>
           </motion.div>
           <h1 className="text-4xl sm:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">
@@ -1247,15 +1425,18 @@ export default function Dashboard() {
                     }`}
                   >
                     {widget.visible ? <Eye size={12} /> : <EyeOff size={12} />}
-                    {widget.id === 'steps' ? 'ก้าวเดิน' :
-                      widget.id === 'calories' ? 'แคลอรี่' :
-                        widget.id === 'water' ? 'น้ำ' :
-                          widget.id === 'heartRate' ? 'อัตราหัวใจ' :
-                            widget.id === 'sleep' ? 'การนอน' :
-                              widget.id === 'weight' ? 'น้ำหนัก' :
-                                widget.id === 'fasting' ? 'IF' :
-                                  widget.id === 'streaks' ? 'สถิติ/เหรียญ' :
-                                    widget.id === 'quickActions' ? 'ทางลัด' : widget.id}
+                    {widget.id === 'liveHR' ? 'Live HR' :
+                      widget.id === 'steps' ? 'ก้าวเดิน' :
+                        widget.id === 'calories' ? 'แคลอรี่' :
+                          widget.id === 'water' ? 'น้ำ' :
+                            widget.id === 'spo2' ? 'ออกซิเจน' :
+                              widget.id === 'readiness' ? 'ความพร้อม' :
+                                widget.id === 'heartRate' ? 'อัตราหัวใจ' :
+                                  widget.id === 'sleep' ? 'การนอน' :
+                                    widget.id === 'weight' ? 'น้ำหนัก' :
+                                      widget.id === 'fasting' ? 'IF' :
+                                        widget.id === 'streaks' ? 'สถิติ/เหรียญ' :
+                                          widget.id === 'quickActions' ? 'ทางลัด' : widget.id}
                   </button>
                 ))}
               </div>

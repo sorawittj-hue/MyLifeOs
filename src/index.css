@@ -333,3 +333,67 @@ body {
     radial-gradient(ellipse at 80% 20%, rgba(96, 165, 250, 0.06) 0%, transparent 50%),
     radial-gradient(ellipse at 40% 80%, rgba(167, 139, 250, 0.04) 0%, transparent 50%);
 }
+
+/* ── Whoop-Style: Heartbeat Animation ──────────────────────── */
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.15); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.08); }
+  60% { transform: scale(1); }
+}
+
+.animate-heartbeat {
+  animation: heartbeat 1.2s ease-in-out infinite;
+}
+
+/* HR Zone glow effects */
+.glow-hr-peak {
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.2), 0 0 15px rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+.glow-hr-cardio {
+  box-shadow: 0 0 40px rgba(249, 115, 22, 0.2), 0 0 15px rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.3) !important;
+}
+.glow-hr-fat-burn {
+  box-shadow: 0 0 40px rgba(234, 179, 8, 0.15), 0 0 15px rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.25) !important;
+}
+
+/* SpO2 oxygen bubble animation */
+@keyframes oxygen-bubble {
+  0% { transform: translateY(0) scale(1); opacity: 0.6; }
+  50% { transform: translateY(-6px) scale(1.1); opacity: 0.9; }
+  100% { transform: translateY(0) scale(1); opacity: 0.6; }
+}
+
+.animate-oxygen {
+  animation: oxygen-bubble 3s ease-in-out infinite;
+}
+
+/* Readiness trend arrow pulse */
+@keyframes trend-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.animate-trend {
+  animation: trend-pulse 2s ease-in-out infinite;
+}
+
+/* Recovery ring glow animation on high recovery */
+@keyframes recovery-glow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(34, 197, 94, 0.3)); }
+  50% { filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.5)); }
+}
+
+.animate-recovery-glow {
+  animation: recovery-glow 3s ease-in-out infinite;
+}
+
+/* Number counter transition for real-time feel */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on;
+}

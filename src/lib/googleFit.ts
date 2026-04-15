@@ -213,38 +213,43 @@ async function syncDemoData(uid: string | null) {
 
   for (let i = 0; i < 7; i++) {
     const date = format(subDays(now, i), 'yyyy-MM-dd');
-    const steps = Math.floor(Math.random() * 5_000) + 5_000;
-    const hr = Math.floor(Math.random() * 20) + 65;
-    const rhr = Math.floor(Math.random() * 10) + 55;
-    const hrv = Math.floor(Math.random() * 30) + 35;
-    const spo2 = Math.floor(Math.random() * 3) + 96;
+    // Use deterministic seeds based on date instead of pure random for stable demo
+    const seed = date.split('-').reduce((a, b) => a + parseInt(b), 0);
+    const steps = 5000 + ((seed * 137) % 5000);
+    const hr = 65 + ((seed * 43) % 20);
+    const rhr = 55 + ((seed * 17) % 10);
+    const hrv = 35 + ((seed * 71) % 30);
+    const spo2 = 96 + ((seed * 23) % 3);
 
     if (uid) {
       await fsUpsertStep(uid, date, steps, 'demo');
-      // Multiple intra-day HR readings for realistic data
+      // Multiple intra-day HR readings for realistic data (needed for Live HR widget)
       for (let h = 0; h < 24; h += 2) {
         const time = `${String(h).padStart(2, '0')}:00`;
-        const hrVar = hr + Math.floor(Math.random() * 20) - 10;
-        await fsUpsertVital(uid, { date, time, type: 'heart_rate', value1: hrVar, unit: 'BPM', source: 'demo' });
+        const hrVar = hr + ((seed * (h + 1) * 13) % 20) - 10;
+        await fsUpsertVital(uid, { date, time, type: 'heart_rate', value1: Math.max(50, Math.min(180, hrVar)), unit: 'BPM', source: 'demo' });
       }
-      // Resting HR
+      // Resting HR (tagged for Dashboard extraction)
       await fsUpsertVital(uid, { date, time: '04:00', type: 'heart_rate', value1: rhr, unit: 'BPM', source: 'demo', notes: 'resting' });
-      // SpO2
+      // HRV (tagged for Recovery engine extraction)
+      await fsUpsertVital(uid, { date, time: '00:01', type: 'heart_rate', value1: hrv, unit: 'ms', source: 'demo', notes: 'hrv_rmssd' });
+      // SpO2 (Blood Oxygen)
       await fsUpsertVital(uid, { date, time: '07:00', type: 'oxygen', value1: spo2, unit: '%', source: 'demo' });
-      // Sleep
-      if (i > 0) {
-        const bedHour = 22 + Math.floor(Math.random() * 2);
-        const wakeHour = 5 + Math.floor(Math.random() * 2);
-        const quality = Math.floor(Math.random() * 30) + 70;
-        await fsUpsertSleep(uid, {
-          date,
-          bedtime: `${bedHour}:${Math.floor(Math.random() * 60).toString().padStart(2, '0')}`,
-          wakeTime: `0${wakeHour}:${Math.floor(Math.random() * 60).toString().padStart(2, '0')}`,
-          quality,
-          source: 'demo',
-        });
-      }
+      // Sleep — generate for ALL days including today (i=0)
+      const bedHour = 22 + ((seed * 7) % 2);
+      const wakeHour = 5 + ((seed * 11) % 2);
+      const quality = 70 + ((seed * 31) % 30);
+      const bedMin = (seed * 19) % 60;
+      const wakeMin = (seed * 29) % 60;
+      await fsUpsertSleep(uid, {
+        date,
+        bedtime: `${bedHour}:${String(bedMin).padStart(2, '0')}`,
+        wakeTime: `0${wakeHour}:${String(wakeMin).padStart(2, '0')}`,
+        quality,
+        source: 'demo',
+      });
     } else {
+      // Local Dexie fallback for guest mode
       const existingStep = await db.stepLogs.where('date').equals(date).first();
       if (existingStep) {
         await db.stepLogs.update(existingStep.id!, { count: steps, source: 'demo' });
@@ -252,9 +257,41 @@ async function syncDemoData(uid: string | null) {
         await db.stepLogs.add(withSyncMeta({ date, count: steps, source: 'demo' }) as StepLog);
       }
 
-      const existingHr = (await db.vitals.where('date').equals(date).toArray()).find(v => v.type === 'heart_rate');
-      if (!existingHr) {
-        await db.vitals.add(withSyncMeta({ date, time: '08:00', type: 'heart_rate', value1: hr, unit: 'BPM', source: 'demo' }) as Vital);
+      // Generate multiple HR readings for local mode too
+      const existingVitals = await db.vitals.where('date').equals(date).toArray();
+      const existingHrKeys = new Set(existingVitals.filter(v => v.type === 'heart_rate').map(v => v.time));
+      const newVitals: Vital[] = [];
+      for (let h = 0; h < 24; h += 3) {
+        const time = `${String(h).padStart(2, '0')}:00`;
+        if (!existingHrKeys.has(time)) {
+          const hrVar = hr + ((seed * (h + 1) * 13) % 20) - 10;
+          newVitals.push(withSyncMeta({ date, time, type: 'heart_rate', value1: Math.max(50, hrVar), unit: 'BPM', source: 'demo' }) as Vital);
+        }
+      }
+      // Add resting HR + HRV + SpO2 for local mode
+      if (!existingVitals.find(v => (v as any).notes === 'resting')) {
+        newVitals.push(withSyncMeta({ date, time: '04:00', type: 'heart_rate', value1: rhr, unit: 'BPM', source: 'demo', notes: 'resting' }) as Vital);
+      }
+      if (!existingVitals.find(v => (v as any).notes === 'hrv_rmssd')) {
+        newVitals.push(withSyncMeta({ date, time: '00:01', type: 'heart_rate', value1: hrv, unit: 'ms', source: 'demo', notes: 'hrv_rmssd' }) as Vital);
+      }
+      if (!existingVitals.find(v => v.type === 'oxygen')) {
+        newVitals.push(withSyncMeta({ date, time: '07:00', type: 'oxygen', value1: spo2, unit: '%', source: 'demo' }) as Vital);
+      }
+      if (newVitals.length > 0) await db.vitals.bulkAdd(newVitals);
+
+      // Sleep for local mode
+      const existingSleep = await db.sleepLogs.where('date').equals(date).first();
+      if (!existingSleep) {
+        const bedHour = 22 + ((seed * 7) % 2);
+        const wakeHour = 5 + ((seed * 11) % 2);
+        await db.sleepLogs.add(withSyncMeta({
+          date,
+          bedtime: `${bedHour}:${String((seed * 19) % 60).padStart(2, '0')}`,
+          wakeTime: `0${wakeHour}:${String((seed * 29) % 60).padStart(2, '0')}`,
+          quality: 70 + ((seed * 31) % 30),
+          source: 'demo',
+        }) as SleepLog);
       }
     }
   }

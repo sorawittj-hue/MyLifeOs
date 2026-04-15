@@ -12,15 +12,18 @@ export type TabName = 'dashboard' | 'nutrition' | 'fasting' | 'metrics' | 'habit
 
 // ── Default Dashboard Widgets ────────────────────────────────
 const DEFAULT_DASHBOARD_WIDGETS: DashboardWidget[] = [
-  { id: 'steps', order: 0, visible: true, size: 'large' },
-  { id: 'calories', order: 1, visible: true, size: 'large' },
-  { id: 'water', order: 2, visible: true, size: 'medium' },
-  { id: 'heartRate', order: 3, visible: true, size: 'small' },
-  { id: 'sleep', order: 4, visible: true, size: 'small' },
-  { id: 'weight', order: 5, visible: true, size: 'large' },
-  { id: 'fasting', order: 6, visible: true, size: 'medium' },
-  { id: 'streaks', order: 7, visible: true, size: 'large' },
-  { id: 'quickActions', order: 8, visible: true, size: 'medium' },
+  { id: 'liveHR', order: 0, visible: true, size: 'large' },
+  { id: 'steps', order: 1, visible: true, size: 'large' },
+  { id: 'calories', order: 2, visible: true, size: 'large' },
+  { id: 'water', order: 3, visible: true, size: 'medium' },
+  { id: 'spo2', order: 4, visible: true, size: 'small' },
+  { id: 'readiness', order: 5, visible: true, size: 'small' },
+  { id: 'heartRate', order: 6, visible: true, size: 'small' },
+  { id: 'sleep', order: 7, visible: true, size: 'small' },
+  { id: 'weight', order: 8, visible: true, size: 'large' },
+  { id: 'fasting', order: 9, visible: true, size: 'medium' },
+  { id: 'streaks', order: 10, visible: true, size: 'large' },
+  { id: 'quickActions', order: 11, visible: true, size: 'medium' },
 ];
 
 // ── Daily Health Metrics (Recovery + Strain) ─────────────────
@@ -356,11 +359,29 @@ export const useAppStore = create<AppState>()(
         theme: state.theme,
         units: state.units,
         notifications: state.notifications,
+        googleFitTokens: state.googleFitTokens,
         isGoogleFitConnected: state.isGoogleFitConnected,
         demoMode: state.demoMode,
         dashboardWidgets: state.dashboardWidgets,
         fcmToken: state.fcmToken,
       }),
+      // Merge new widgets into existing persisted state for returning users
+      merge: (persistedState: any, currentState: any) => {
+        const merged = { ...currentState, ...persistedState };
+        // Ensure new widget IDs exist in persisted widgets
+        if (merged.dashboardWidgets) {
+          const existingIds = new Set(merged.dashboardWidgets.map((w: any) => w.id));
+          const newWidgets = DEFAULT_DASHBOARD_WIDGETS.filter(w => !existingIds.has(w.id));
+          if (newWidgets.length > 0) {
+            const maxOrder = Math.max(...merged.dashboardWidgets.map((w: any) => w.order), -1);
+            merged.dashboardWidgets = [
+              ...merged.dashboardWidgets,
+              ...newWidgets.map((w, i) => ({ ...w, order: maxOrder + 1 + i })),
+            ];
+          }
+        }
+        return merged;
+      },
     }
   )
 );
