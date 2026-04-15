@@ -21,11 +21,11 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../lib/store';
 
 // ── Tuning Constants ─────────────────────────────────────────
-const ACTIVE_POLL_MS    = 60 * 1000;    // 60 seconds when tab is visible
-const BG_POLL_MS        = 5 * 60 * 1000; // 5 minutes when in background
-const MIN_SYNC_GAP_MS   = 30 * 1000;    // 30-second throttle (aggressive)
-const RETRY_DELAY_MS    = 10 * 1000;    // Retry after 10s on failure
-const MAX_RETRIES       = 3;
+const ACTIVE_POLL_MS = 60 * 1000;    // 60 seconds when tab is visible
+const BG_POLL_MS = 5 * 60 * 1000; // 5 minutes when in background
+const MIN_SYNC_GAP_MS = 30 * 1000;    // 30-second throttle (aggressive)
+const RETRY_DELAY_MS = 10 * 1000;    // Retry after 10s on failure
+const MAX_RETRIES = 3;
 
 // ── Live Sync Status (global event bus for Dashboard) ─────────
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
@@ -59,10 +59,10 @@ export function useHealthAutoSync() {
     firebaseUser,
   } = useAppStore();
 
-  const lastSyncAtRef   = useRef<number>(0);
-  const isSyncingRef    = useRef<boolean>(false);
-  const retryCountRef   = useRef<number>(0);
-  const pollTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSyncAtRef = useRef<number>(0);
+  const isSyncingRef = useRef<boolean>(false);
+  const retryCountRef = useRef<number>(0);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Core sync executor ──────────────────────────────────────
   const runSync = useCallback(async (reason: string, force = false) => {
@@ -70,11 +70,13 @@ export function useHealthAutoSync() {
 
     // Throttle: bail if we synced too recently (unless forced)
     if (!force && now - lastSyncAtRef.current < MIN_SYNC_GAP_MS) {
+      console.log(`[HealthAutoSync] ⏱ Throttled (${reason}) - last sync ${now - lastSyncAtRef.current}ms ago`);
       return;
     }
 
     // Guard: only one sync at a time
     if (isSyncingRef.current) {
+      console.log(`[HealthAutoSync] ⏱ Already syncing, skipping (${reason})`);
       return;
     }
 
@@ -84,10 +86,17 @@ export function useHealthAutoSync() {
 
     try {
       console.log(`[HealthAutoSync] ⚡ Sync (${reason})...`);
+      console.log(`[HealthAutoSync] 📊 State: demoMode=${demoMode}, hasTokens=${!!googleFitTokens}, isGoogleFitConnected=${isGoogleFitConnected}, uid=${firebaseUser?.uid}`);
+
+      if (googleFitTokens) {
+        console.log(`[HealthAutoSync] 🔑 Token expiry: ${googleFitTokens.expiry_date ? new Date(googleFitTokens.expiry_date).toISOString() : 'unknown'}`);
+      }
+
       const { fetchGoogleFitData } = await import('../lib/googleFit');
       const uid = firebaseUser?.uid ?? null;
 
       if (demoMode) {
+        console.log(`[HealthAutoSync] 🎮 Running in DEMO mode`);
         await fetchGoogleFitData(
           googleFitTokens || ({} as any),
           setGoogleFitTokens,
@@ -95,12 +104,15 @@ export function useHealthAutoSync() {
           uid,
         );
       } else if (googleFitTokens) {
+        console.log(`[HealthAutoSync] 🔌 Fetching REAL Google Fit data`);
         await fetchGoogleFitData(
           googleFitTokens,
           setGoogleFitTokens,
           false,
           uid,
         );
+      } else {
+        console.log(`[HealthAutoSync] ⚠️ No tokens and not in demo mode - skipping sync`);
       }
 
       const syncTime = Date.now();

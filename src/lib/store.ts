@@ -133,7 +133,7 @@ export const useAppStore = create<AppState>()(
       },
 
       setDemoMode: (enabled) => set({ demoMode: enabled }),
-      
+
       setPrivacyShield: (enabled) => set({ privacyShield: enabled }),
 
       // ── Dashboard Widget Operations ────────────────────────
@@ -367,6 +367,17 @@ export const useAppStore = create<AppState>()(
       }),
       // Merge new widgets into existing persisted state for returning users
       merge: (persistedState: any, currentState: any) => {
+        console.log('[Store] 📦 Persisted state from localStorage:', {
+          hasGoogleFitTokens: !!persistedState?.googleFitTokens,
+          googleFitTokens: persistedState?.googleFitTokens ? {
+            has_access_token: !!persistedState.googleFitTokens.access_token,
+            has_refresh_token: !!persistedState.googleFitTokens.refresh_token,
+            expiry_date: persistedState.googleFitTokens.expiry_date,
+          } : null,
+          isGoogleFitConnected: persistedState?.isGoogleFitConnected,
+          demoMode: persistedState?.demoMode,
+        });
+
         const merged = { ...currentState, ...persistedState };
         // Ensure new widget IDs exist in persisted widgets
         if (merged.dashboardWidgets) {

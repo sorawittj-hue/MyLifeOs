@@ -143,7 +143,10 @@ export async function fetchGoogleFitData(
   isDemo: boolean = false,
   uid: string | null = null,
 ) {
+  console.log(`[GoogleFit] 🚀 fetchGoogleFitData called: isDemo=${isDemo}, hasUid=${!!uid}, hasTokens=${!!tokens?.access_token}`);
+
   if (isDemo) {
+    console.log(`[GoogleFit] 🎮 DEMO MODE - generating mock data`);
     await syncDemoData(uid);
     return;
   }
@@ -151,7 +154,15 @@ export async function fetchGoogleFitData(
   // ── Token refresh ─────────────────────────────────────────
   let accessToken = tokens.access_token;
 
+  if (!accessToken) {
+    console.error(`[GoogleFit] ❌ No access_token provided in non-demo mode!`);
+    throw new Error('NO_ACCESS_TOKEN');
+  }
+
+  console.log(`[GoogleFit] 🔑 Token expiry: ${tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : 'unknown'}`);
+
   if (tokens.expiry_date && Date.now() > tokens.expiry_date - 60_000) {
+    console.log(`[GoogleFit] ⚠️ Token expired or expiring soon, attempting refresh...`);
     if (tokens.refresh_token) {
       try {
         const response = await axios.post('/api/auth/google/refresh', {
@@ -178,14 +189,14 @@ export async function fetchGoogleFitData(
 
   // ── Launch all syncs in parallel ─────────────────────────
   const syncTasks = [
-    { name: 'Steps (7d)',           task: syncSteps(accessToken, sevenDaysAgo, now, uid) },
-    { name: 'Steps (Live)',         task: syncLiveSteps(accessToken, todayStart, now, uid) },
-    { name: 'Heart Rate (Intra)',   task: syncHeartRateIntraDay(accessToken, threeHoursAgo, now, uid) },
-    { name: 'Heart Rate (7d)',      task: syncHeartRate(accessToken, sevenDaysAgo, now, uid) },
-    { name: 'Sleep',                task: syncSleep(accessToken, sevenDaysAgo, now, uid) },
-    { name: 'Blood Pressure',       task: syncBloodPressure(accessToken, sevenDaysAgo, now, uid) },
-    { name: 'Oxygen Saturation',    task: syncOxygen(accessToken, sevenDaysAgo, now, uid) },
-    { name: 'Resting HR + HRV',    task: syncRestingHRAndHRV(accessToken, todayStart, now, uid) },
+    { name: 'Steps (7d)', task: syncSteps(accessToken, sevenDaysAgo, now, uid) },
+    { name: 'Steps (Live)', task: syncLiveSteps(accessToken, todayStart, now, uid) },
+    { name: 'Heart Rate (Intra)', task: syncHeartRateIntraDay(accessToken, threeHoursAgo, now, uid) },
+    { name: 'Heart Rate (7d)', task: syncHeartRate(accessToken, sevenDaysAgo, now, uid) },
+    { name: 'Sleep', task: syncSleep(accessToken, sevenDaysAgo, now, uid) },
+    { name: 'Blood Pressure', task: syncBloodPressure(accessToken, sevenDaysAgo, now, uid) },
+    { name: 'Oxygen Saturation', task: syncOxygen(accessToken, sevenDaysAgo, now, uid) },
+    { name: 'Resting HR + HRV', task: syncRestingHRAndHRV(accessToken, todayStart, now, uid) },
   ];
 
   console.log(`[GoogleFit] ⚡ Launching ${syncTasks.length} parallel sync tasks → ${uid ? 'Firebase' : 'Dexie'}`);
