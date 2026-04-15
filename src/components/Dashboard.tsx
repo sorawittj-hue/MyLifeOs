@@ -263,6 +263,7 @@ export default function Dashboard() {
   });
   const [showCustomize, setShowCustomize] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ status: HealthSyncStatus; lastSyncAt: number }>({ status: 'idle', lastSyncAt: 0 });
+  const [isManuallySyncing, setIsManuallySyncing] = useState(false);
   const isDark = theme === 'dark';
   const timeOfDay = getTimeOfDay();
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -1051,8 +1052,6 @@ export default function Dashboard() {
   const rec = dailyMetrics?.recovery;
   const str = dailyMetrics?.strain;
   const correlations = dailyMetrics?.habitCorrelations || [];
-
-  const [isManuallySyncing, setIsManuallySyncing] = useState(false);
 
   const handleManualSync = async () => {
     if (!googleFitTokens && !demoMode) return;
